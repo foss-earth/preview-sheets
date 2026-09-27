@@ -130,6 +130,37 @@ describe("validateScene", () => {
     expect(errorsOf(doc).join("\n")).toContain("entity type \"model\" is required but not supported");
   });
 
+  it("gives each orb the scene's marker style, which its own overrides one property at a time", () => {
+    const doc = example();
+    edit(doc, "markerStyle", { outline: { color: "#FFcc00", widthPx: 2 }, hover: { scale: 1.5 } });
+    edit(doc, "entities.1.marker.style", { outline: { color: "#00000080", widthPx: 3 }, hover: null });
+    const result = validateScene(doc, { baseUrl: BASE });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.scene.panoramas.get("garden")!.markerStyle).toEqual({ outline: { color: [1, 0.8, 0, 1], widthPx: 2 }, hoverScale: 1.5 });
+    expect(result.scene.panoramas.get("courtyard")!.markerStyle).toEqual({ outline: { color: [0, 0, 0, 128 / 255], widthPx: 3 }, hoverScale: 1 });
+
+    edit(doc, "entities.1.marker.style", { outline: null });
+    const off = validateScene(doc, { baseUrl: BASE });
+    expect(off.ok && off.scene.panoramas.get("courtyard")!.markerStyle).toEqual({ outline: null, hoverScale: 1.5 });
+    // Without a style anywhere, orbs are drawn as before.
+    const plain = validateScene(example(), { baseUrl: BASE });
+    expect(plain.ok && plain.scene.panoramas.get("garden")!.markerStyle).toEqual({ outline: null, hoverScale: 1 });
+  });
+
+  it("checks marker styles with their paths", () => {
+    const doc = example();
+    edit(doc, "markerStyle", { outline: { color: "gold", widthPx: 40 }, hover: { scale: 0.5 }, glow: true });
+    edit(doc, "entities.0.marker.style", { outline: { color: "#abc", widthPx: 1 } });
+    expect(errorsOf(doc)).toEqual([
+      "$.markerStyle.glow: is not a property of this record; namespaced additions belong in \"extensions\"",
+      "$.markerStyle.outline.color: must be a hex colour, #rrggbb or #rrggbbaa",
+      "$.markerStyle.outline.widthPx: must be in [0, 32]",
+      "$.markerStyle.hover.scale: must be in [1, 4]",
+      "$.entities[0].marker.style.outline.color: must be a hex colour, #rrggbb or #rrggbbaa",
+    ]);
+  });
+
   it("fails links to panoramas that do not exist", () => {
     const doc = example();
     edit(doc, "entities.0.links.0.target", "nowhere");
