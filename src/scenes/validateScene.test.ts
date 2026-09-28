@@ -51,6 +51,16 @@ describe("validateScene", () => {
     expect(scene.groups[0].members).toEqual(["garden", "courtyard"]);
   });
 
+  it("keeps whether an image's north is set, and leaves it out when the scene does not say", () => {
+    const doc = example();
+    edit(doc, "entities.0.imagePose.aligned", false);
+    const result = validateScene(doc, { baseUrl: BASE });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.scene.panoramas.get("garden")!.imagePose.aligned).toBe(false);
+    expect("aligned" in result.scene.panoramas.get("courtyard")!.imagePose).toBe(false);
+  });
+
   it("fails an unknown version before reading anything else", () => {
     const doc = example();
     edit(doc, "version", 2);
@@ -72,6 +82,7 @@ describe("validateScene", () => {
     edit(doc, "entities.0.capture.latitudeDeg", 91);
     edit(doc, "entities.0.capture.longitudeDeg", 180);
     edit(doc, "entities.1.imagePose.rollDeg", -180);
+    edit(doc, "entities.0.imagePose.aligned", "yes");
     edit(doc, "entities.1.initialView.verticalFovDeg", 180);
     edit(doc, "assets.0.representations.1.width", 4000);
     edit(doc, "assets.1.representations.0.faces.nz", REMOVE);
@@ -80,6 +91,7 @@ describe("validateScene", () => {
     expect(errors).toContain("$.entities[0].capture.latitudeDeg: must be in [-90, 90]");
     expect(errors).toContain("$.entities[0].capture.longitudeDeg: must be in [-180, 180)");
     expect(errors).toContain("$.entities[1].imagePose.rollDeg: must be in (-180, 180]");
+    expect(errors).toContain("$.entities[0].imagePose.aligned: must be true or false");
     expect(errors).toContain("$.entities[1].initialView.verticalFovDeg: must be in (0, 180)");
     expect(errors).toContain("$.assets[0].representations[1].width: must be twice the height");
     expect(errors).toContain("$.assets[1].representations[0].faces.nz: is missing");

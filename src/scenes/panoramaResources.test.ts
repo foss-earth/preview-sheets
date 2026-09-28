@@ -17,7 +17,7 @@ const rep = (asset: ResolvedAsset, id: string): ResolvedRepresentation => asset.
 
 const SETTINGS: ResourceSettings = {
   limits: { sourceGpu: 128 * MIB, overlap: 48 * MIB, decoded: 64 * MIB, encoded: 32 * MIB, uploadOutstanding: 16 * MIB },
-  responseBytes: 16 * MIB, requests: 4, decodes: 1, timeoutMs: 30_000, immersionMaxSide: 8192,
+  responseBytes: 16 * MIB, requests: 4, decodes: 1, timeoutMs: 30_000, immersionWidth: Number.POSITIVE_INFINITY,
 };
 
 interface FakeTexture extends GpuSource { disposed: boolean }
@@ -133,9 +133,9 @@ describe("panorama resources", () => {
     expect(lying.stats().pools.sourceGpu.reserved).toBe(0);
   });
 
-  it("refuses an immersion side over the limit and one the device cannot hold", async () => {
-    const limited = createPanoramaResources(backend().value, { ...SETTINGS, immersionMaxSide: 1024 });
-    await expect(limited.acquire(grid, rep(grid, "whole-2048"))).rejects.toMatchObject({ limiter: "immersionMaxSide" });
+  it("refuses an immersion image wider than the image detail, and one the device cannot hold", async () => {
+    const limited = createPanoramaResources(backend().value, { ...SETTINGS, immersionWidth: 1024 });
+    await expect(limited.acquire(grid, rep(grid, "whole-2048"))).rejects.toMatchObject({ limiter: "immersionWidth" });
     const device = createPanoramaResources(backend({ maxTextureSide: () => 1024 }).value, SETTINGS);
     await expect(device.acquire(grid, rep(grid, "whole-2048"))).rejects.toMatchObject({ limiter: "device" });
   });
