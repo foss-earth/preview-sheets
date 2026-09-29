@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { MIB, representationGpuBytes } from "./budget";
 import type { ResolvedAsset, ResolvedRepresentation } from "./format";
-import { createPanoramaResources, ResourceRefusal, type GpuSource, type ResourceBackend, type ResourceSettings } from "./panoramaResources";
+import { createPanoramaResources, ResourceRefusal, type GpuSource, type ResourceBackend, type ResourceProgress, type ResourceSettings } from "./panoramaResources";
 import { validateScene } from "./validateScene";
 
 const BASE = "https://foss-earth.test/examples/panorama-scenes/";
@@ -57,6 +57,43 @@ function backend(overrides: Partial<ResourceBackend<FakeTexture>> = {}) {
 }
 
 describe("panorama resources", () => {
+  it("reports bytes while an image is still arriving, with completion after decoding and upload", async () => {
+    const representation = rep(grid, "whole-2048");
+    if (representation.projection !== "equirectangular") throw new Error("Expected image fixture");
+    const bytes = readFileSync(new URL(`../../public/${new URL(representation.url).pathname.replace(/^\//, "")}`, import.meta.url));
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    const updates: ResourceProgress[] = [];
+    const b = backend({ fetch: async () => new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } }), { headers: { "content-type": "image/jpeg" } }) });
+    const resources = createPanoramaResources(b.value, SETTINGS, update => updates.push(update));
+    const loading = resources.acquire(grid, representation);
+    await vi.waitFor(() => expect(stream).toBeDefined());
+    const split = Math.floor(bytes.length / 2);
+    stream.enqueue(bytes.subarray(0, split));
+    await vi.waitFor(() => expect(updates.at(-1)?.receivedBytes).toBe(split));
+    expect(updates.at(-1)).toMatchObject({ assetId: grid.id, state: "loading", totalBytes: representation.encodedBytes });
+    expect(b.textures).toHaveLength(0);
+    stream.enqueue(bytes.subarray(split));
+    stream.close();
+    const handle = await loading;
+    expect(updates.at(-1)).toMatchObject({ receivedBytes: bytes.length, state: "ready" });
+    expect(resources.stats().transferredBytes).toBe(bytes.length);
+    handle.release();
+    resources.dispose();
+  });
+
+  it("does not leave queued cube faces or reservations behind when one request fails", async () => {
+    let requests = 0;
+    const b = backend({ fetch: async () => { requests += 1; throw new Error("Offline"); } });
+    const updates: ResourceProgress[] = [];
+    const resources = createPanoramaResources(b.value, { ...SETTINGS, requests: 1 }, update => updates.push(update));
+    await expect(resources.acquire(grid, rep(grid, "preview-64"))).rejects.toThrow("Offline");
+    expect(requests).toBeLessThan(6);
+    expect(resources.stats()).toMatchObject({ activeRequests: 0, queuedRequests: 0 });
+    expect(resources.stats().pools.encoded.reserved).toBe(0);
+    expect(updates.at(-1)?.state).toBe("failed");
+    resources.dispose();
+  });
+
   it("loads a preview cube within its reservations, then keeps only the GPU bytes, and shares it", async () => {
     const b = backend();
     const resources = createPanoramaResources(b.value, SETTINGS);
