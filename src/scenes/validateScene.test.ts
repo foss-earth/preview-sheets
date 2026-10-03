@@ -98,6 +98,44 @@ describe("validateScene", () => {
     expect(errors).toContain("$.assets[1].id: must be a nonempty ASCII id");
   });
 
+  it("reads a tiled cube, resolving its folder against the manifest", () => {
+    const doc = example();
+    const tiled = { id: "eac-tiles", role: "immersion", projection: "tiled-cube", warp: "equi-angular", mimeType: "image/jpeg", encodedBytes: 600, faceSize: 768, tileSize: 192, gutter: 1, levelBytes: [100, 200, 300], url: "media/garden/eac-tiles/" };
+    push(doc, "assets.0.representations", tiled);
+    const result = validateScene(doc, { baseUrl: BASE });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const representation = result.scene.assets.get("garden-image")!.representations.find(entry => entry.id === "eac-tiles");
+    expect(representation).toEqual({ ...tiled, url: "https://scenes.example/neutral/media/garden/eac-tiles/" });
+  });
+
+  it("checks a tiled cube's levels, sizes, folder and role", () => {
+    const tiled = (changes: Record<string, unknown>) => {
+      const doc = example();
+      push(doc, "assets.0.representations", { id: "tiles", role: "immersion", projection: "tiled-cube", warp: "gnomonic", mimeType: "image/jpeg", encodedBytes: 600, faceSize: 768, tileSize: 192, gutter: 1, levelBytes: [100, 200, 300], url: "tiles/", ...changes });
+      return errorsOf(doc);
+    };
+    const path = "$.assets[0].representations[2]";
+    expect(tiled({})).toEqual([]);
+    expect(tiled({ faceSize: 1536 })).toEqual([`${path}.faceSize: must be the tile size times 2 to the number of levels less one: 768`]);
+    expect(tiled({ levelBytes: [100, 200, 299] })).toEqual([`${path}.levelBytes: must add up to encodedBytes`]);
+    expect(tiled({ url: "tiles" })).toEqual([`${path}.url: must name the tiles' folder, ending with "/"`]);
+    expect(tiled({ gutter: 96 })).toEqual([`${path}.gutter: must be a whole number of texels, at least 0 and less than half the tile size`]);
+    expect(tiled({ role: "preview" })).toContain(`${path}.role: must be "immersion": a tiled cube shows over its asset's preview cube, so it cannot be one`);
+    expect(tiled({ warp: "fisheye" })).toEqual([`${path}.warp: must be one of "equi-angular", "gnomonic"`]);
+    expect(tiled({ faces: {} })).toEqual([`${path}.faces: is not a property of this record; namespaced additions belong in "extensions"`]);
+  });
+
+  it("skips a representation of a later projection with a warning, so the asset's others still show", () => {
+    const doc = example();
+    push(doc, "assets.0.representations", { id: "octahedral", role: "immersion", projection: "octahedral", mimeType: "image/jpeg", encodedBytes: 5, url: "o.jpg", side: 1024 });
+    const result = validateScene(doc, { baseUrl: BASE });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.scene.assets.get("garden-image")!.representations.map(entry => entry.id)).not.toContain("octahedral");
+    expect(result.scene.warnings).toContainEqual({ path: "$.assets[0].representations[2].projection", message: "projection \"octahedral\" is not supported by this loader; this representation is skipped" });
+  });
+
   it("needs a preview cube, unique ids and existing references", () => {
     const doc = example();
     edit(doc, "assets.0.representations", [get(doc, "assets.0.representations.1")]);
