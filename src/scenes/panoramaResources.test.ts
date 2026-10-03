@@ -279,3 +279,117 @@ describe("panorama resources with saved images", () => {
     expect((await media.inspect()).files).toBe(0);
   });
 });
+
+describe("panorama resources with a preview sheet", () => {
+  // campus-pair puts both orbs' 64 px cubes in one sheet, one cube to a row.
+  const photoPreview = rep(photo, "preview-64");
+  const gridPreview = rep(grid, "preview-64");
+  if (photoPreview.projection !== "cube" || gridPreview.projection !== "cube" || !photoPreview.sheet || !gridPreview.sheet) throw new Error("Expected the fixture's 64 px cubes in a sheet");
+  const sheet = photoPreview.sheet;
+  const SHEETS: ResourceSettings = { ...SETTINGS, previewSheets: true };
+  type Rect = [number, number, number, number];
+
+  /** A backend that cuts faces out of a decoded image, recording each rectangle and what each cube was uploaded from. */
+  function cutting(overrides: Partial<ResourceBackend<FakeTexture>> = {}) {
+    const cuts: Rect[] = [];
+    const uploads: { label: string; faces: Record<string, Rect | null> }[] = [];
+    let sheetsOpen = 0;
+    const b = backend({
+      async decode() {
+        sheetsOpen += 1;
+        return { width: 0, height: 0, close: () => { sheetsOpen -= 1; } } as unknown as ImageBitmap;
+      },
+      async crop(_image, x, y, width, height) {
+        cuts.push([x, y, width, height]);
+        return { rect: [x, y, width, height], close() {} } as unknown as ImageBitmap;
+      },
+      async uploadCube(faces, label) {
+        uploads.push({ label, faces: Object.fromEntries(Object.entries(faces).map(([name, image]) => [name, (image as unknown as { rect?: Rect }).rect ?? null])) });
+        const texture: FakeTexture = { kind: "cube", gpuBytes: 0, disposed: false, dispose() { texture.disposed = true; } };
+        return texture;
+      },
+      ...overrides,
+    });
+    return { ...b, cuts, uploads, sheetsOpen: () => sheetsOpen };
+  }
+
+  it("places both cubes in the sheet, the second below the first", () => {
+    expect(sheet).toMatchObject({ id: "previews-64", x: 0, y: 0, width: 384, height: 128, mimeType: "image/jpeg" });
+    expect(gridPreview.sheet).toMatchObject({ id: "previews-64", x: 0, y: 64, url: sheet.url, revision: sheet.revision });
+  });
+
+  it("loads every cube of a sheet after one request, each face from its own rectangle", async () => {
+    const b = cutting();
+    const resources = createPanoramaResources(b.value, SHEETS);
+    const [first, second] = await Promise.all([resources.acquire(photo, photoPreview), resources.acquire(grid, gridPreview)]);
+    expect(b.fetched).toEqual([sheet.url]);
+    expect(b.cuts).toHaveLength(12);
+    const row = (y: number): Record<string, Rect> => Object.fromEntries(["px", "nx", "py", "ny", "pz", "nz"].map((face, index) => [face, [index * 64, y, 64, 64]]));
+    expect(b.uploads.find(upload => upload.label.startsWith(photo.id))!.faces).toEqual(row(0));
+    expect(b.uploads.find(upload => upload.label.startsWith(grid.id))!.faces).toEqual(row(64));
+    expect(resources.stats()).toMatchObject({ cubesFromSheets: 2, transferredBytes: sheet.encodedBytes });
+    // The decoded sheet is closed once the last cube has its faces, and nothing stays reserved for it.
+    expect(b.sheetsOpen()).toBe(0);
+    expect(resources.stats().pools.decoded.reserved).toBe(0);
+    expect(resources.stats().pools.encoded.reserved).toBe(0);
+    first.release();
+    second.release();
+  });
+
+  it("falls back to each cube's own files when the sheet fails, and does not ask for it again", async () => {
+    const real = backend();
+    const b = cutting({
+      async fetch(url, init) {
+        if (url === sheet.url) { b.fetched.push(url); return new Response("", { status: 404 }); }
+        return real.value.fetch(url, init);
+      },
+    });
+    const resources = createPanoramaResources(b.value, SHEETS);
+    (await resources.acquire(photo, photoPreview)).release();
+    (await resources.acquire(grid, gridPreview)).release();
+    expect(b.fetched).toEqual([sheet.url]);
+    expect(real.fetched).toHaveLength(12);
+    expect(b.cuts).toEqual([]);
+    expect(resources.stats().cubesFromSheets).toBe(0);
+  });
+
+  it("loads each cube's own files when sheets are turned off, or the backend cannot cut them", async () => {
+    const off = cutting();
+    (await createPanoramaResources(off.value, { ...SHEETS, previewSheets: false }).acquire(photo, photoPreview)).release();
+    expect(off.fetched).toHaveLength(6);
+    expect(off.fetched).not.toContain(sheet.url);
+    const plain = backend();
+    (await createPanoramaResources(plain.value, SHEETS).acquire(photo, photoPreview)).release();
+    expect(plain.fetched).toHaveLength(6);
+  });
+
+  it("keeps the sheet between visits like any image, under its own revision", async () => {
+    const memory = memoryBackend();
+    const media = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const first = cutting({ media });
+    (await createPanoramaResources(first.value, SHEETS).acquire(photo, photoPreview)).release();
+    await media.settled();
+    expect((await media.inspect()).groups.map(group => [group.id, group.files])).toEqual([[`sheet previews-64@${sheet.revision}`, 1]]);
+
+    const later = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const second = cutting({ media: later });
+    const again = createPanoramaResources(second.value, SHEETS);
+    (await again.acquire(grid, gridPreview)).release();
+    expect(second.fetched).toEqual([]);
+    expect(again.stats()).toMatchObject({ cubesFromSheets: 1, reusedFiles: 1, transferredBytes: 0 });
+  });
+
+  it("refuses a sheet whose header is not the size declared, and loads the cube's files", async () => {
+    const real = backend();
+    const b = cutting({
+      async fetch(url, init) {
+        // Another image under the sheet's name.
+        if (url === sheet.url) return real.value.fetch(photoPreview.faces.px, init);
+        return real.value.fetch(url, init);
+      },
+    });
+    (await createPanoramaResources(b.value, SHEETS).acquire(photo, photoPreview)).release();
+    expect(b.cuts).toEqual([]);
+    expect(real.fetched.filter(url => url.includes("preview-64"))).toHaveLength(7);
+  });
+});

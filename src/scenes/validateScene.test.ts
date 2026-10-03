@@ -136,6 +136,36 @@ describe("validateScene", () => {
     expect(result.scene.warnings).toContainEqual({ path: "$.assets[0].representations[2].projection", message: "projection \"octahedral\" is not supported by this loader; this representation is skipped" });
   });
 
+  it("resolves a preview sheet into each cube that names its place in it, and checks the place", () => {
+    const SHEET = { id: "previews", revision: "s1", mimeType: "image/jpeg", width: 768, height: 256, encodedBytes: 5000, url: "media/previews.jpg" };
+    const withSheet = (place: unknown, sheets: unknown[] = [SHEET]): unknown => {
+      const doc = example();
+      edit(doc, "sheets", sheets);
+      const cube = (get(doc, "assets.0.representations") as { projection: string }[]).findIndex(rep => rep.projection === "cube");
+      edit(doc, `assets.0.representations.${cube}.sheet`, place);
+      return doc;
+    };
+    const cubeSize = ((get(example(), "assets.0.representations") as { projection: string; faceSize: number }[]).find(rep => rep.projection === "cube")!).faceSize;
+    const result = validateScene(withSheet({ id: "previews", x: 0, y: 256 - cubeSize }), { baseUrl: BASE });
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect([...result.scene.sheets.values()]).toEqual([{ ...SHEET, url: "https://scenes.example/neutral/media/previews.jpg" }]);
+    const cube = [...result.scene.assets.values()][0].representations.find(rep => rep.projection === "cube");
+    expect(cube).toMatchObject({ sheet: { id: "previews", revision: "s1", url: "https://scenes.example/neutral/media/previews.jpg", width: 768, height: 256, x: 0, y: 256 - cubeSize } });
+    // A scene with no sheets has none, and its cubes no place.
+    const plain = validateScene(EXAMPLE_TEXT, { baseUrl: BASE });
+    expect(plain.ok && plain.scene.sheets.size).toBe(0);
+
+    expect(errorsOf(withSheet({ id: "other", x: 0, y: 0 }))).toEqual([expect.stringMatching(/sheet\.id: names "other", which is not a sheet of this scene$/)]);
+    expect(errorsOf(withSheet({ id: "previews", x: 768 - 6 * cubeSize + 1, y: 0 }))).toEqual([expect.stringMatching(/sheet: puts six \d+ px faces at \(\d+, 0\), outside the 768 × 256 px sheet "previews"$/)]);
+    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 256 - cubeSize + 1 }))).toHaveLength(1);
+    expect(errorsOf(withSheet({ id: "previews", x: 0.5, y: -1 }))).toEqual([expect.stringMatching(/sheet\.x: must be a whole number, 0 or more$/), expect.stringMatching(/sheet\.y: must be a whole number, 0 or more$/)]);
+    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 0, face: "px" }))).toEqual([expect.stringMatching(/sheet\.face: is not a property of this record/)]);
+    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 0 }, [SHEET, SHEET]))).toEqual([expect.stringMatching(/^\$\.sheets\[1\]\.id: repeats sheet id "previews"$/)]);
+    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 0 }, [{ ...SHEET, width: 0, revision: "" }]))).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^\$\.sheets\[0\]\.revision: /), expect.stringMatching(/^\$\.sheets\[0\]\.width: must be a positive whole number$/),
+    ]));
+  });
+
   it("needs a preview cube, unique ids and existing references", () => {
     const doc = example();
     edit(doc, "assets.0.representations", [get(doc, "assets.0.representations.1")]);
