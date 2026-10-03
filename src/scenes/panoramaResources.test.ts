@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { MIB, representationGpuBytes } from "./budget";
 import type { ResolvedAsset, ResolvedRepresentation } from "./format";
+import { createMediaStore, mediaGroup } from "./mediaStore";
 import { createPanoramaResources, ResourceRefusal, type GpuSource, type ResourceBackend, type ResourceProgress, type ResourceSettings } from "./panoramaResources";
+import { memoryBackend } from "../test/memoryMediaBackend";
 import { validateScene } from "./validateScene";
 
 const BASE = "https://foss-earth.test/examples/panorama-scenes/";
@@ -187,5 +189,93 @@ describe("panorama resources", () => {
     const after = await resources.acquire(grid, rep(grid, "preview-32"));
     expect(after.key).not.toBe(before.key);
     expect(b.fetched).toHaveLength(12);
+  });
+});
+
+describe("panorama resources with saved images", () => {
+  const preview = rep(photo, "preview-64");
+  const faces = preview.projection === "cube" ? Object.values(preview.faces) : [];
+
+  it("keeps each header-checked file once and loads from what is kept without asking the network", async () => {
+    const memory = memoryBackend();
+    const media = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const first = backend({ media });
+    const resources = createPanoramaResources(first.value, SETTINGS);
+    (await resources.acquire(photo, preview)).release();
+    await media.settled();
+    expect(first.fetched).toHaveLength(6);
+    expect(await media.inspect()).toMatchObject({ files: 6, bytes: preview.encodedBytes, added: { files: 6 } });
+    expect(resources.stats()).toMatchObject({ reusedFiles: 0, transferredBytes: preview.encodedBytes });
+
+    // A later visit: a new manager and a new store on the same storage.
+    const later = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const second = backend({ media: later });
+    const updates: ResourceProgress[] = [];
+    const again = createPanoramaResources(second.value, SETTINGS, update => updates.push(update));
+    const handle = await again.acquire(photo, preview);
+    expect(second.fetched).toEqual([]);
+    expect(second.textures).toHaveLength(1);
+    expect(again.stats()).toMatchObject({ reusedFiles: 6, reusedBytes: preview.encodedBytes, transferredBytes: 0 });
+    // Progress still reaches the whole, so the list's bar completes.
+    expect(updates.at(-1)).toMatchObject({ state: "ready", receivedBytes: preview.encodedBytes });
+    handle.release();
+  });
+
+  it("keeps another revision of the image apart, so a changed image is downloaded again", async () => {
+    const memory = memoryBackend();
+    const media = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const b = backend({ media });
+    const resources = createPanoramaResources(b.value, SETTINGS);
+    (await resources.acquire(photo, preview)).release();
+    await media.settled();
+    const changed: ResolvedAsset = { ...photo, revision: `${photo.revision}-next` };
+    (await resources.acquire(changed, preview)).release();
+    await media.settled();
+    expect(b.fetched).toHaveLength(12);
+    expect((await media.inspect()).groups.map(group => group.id).sort()).toEqual([mediaGroup(photo, preview).id, mediaGroup(changed, preview).id].sort());
+  });
+
+  it("forgets a kept file that is not the image and asks the network for it", async () => {
+    const memory = memoryBackend();
+    const media = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    // Something else was kept under one face's name.
+    media.put(mediaGroup(photo, preview), faces[0], new Uint8Array(64).fill(1), "image/jpeg");
+    await media.settled();
+    const b = backend({ media });
+    const resources = createPanoramaResources(b.value, SETTINGS);
+    (await resources.acquire(photo, preview)).release();
+    await media.settled();
+    expect(b.fetched).toHaveLength(6);
+    expect(resources.stats().reusedFiles).toBe(0);
+    // The good copy took its place.
+    const kept = await media.get(mediaGroup(photo, preview), faces[0]);
+    expect(kept?.bytes.byteLength).toBeGreaterThan(64);
+  });
+
+  it("forgets a kept file the browser cannot decode, so the next load asks the network", async () => {
+    const memory = memoryBackend();
+    const media = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const filling = backend({ media });
+    (await createPanoramaResources(filling.value, SETTINGS).acquire(photo, preview)).release();
+    await media.settled();
+    let failing = true;
+    const b = backend({ media, decode: async () => { if (failing) throw new Error("The source image could not be decoded."); return { close() {} } as unknown as ImageBitmap; } });
+    const resources = createPanoramaResources(b.value, SETTINGS);
+    await expect(resources.acquire(photo, preview)).rejects.toThrow(/could not be decoded/);
+    await media.settled();
+    expect(b.fetched).toEqual([]);
+    expect((await media.inspect()).files).toBe(5);
+    failing = false;
+    (await resources.acquire(photo, preview)).release();
+    expect(b.fetched).toHaveLength(1);
+  });
+
+  it("does not keep a file whose header is wrong", async () => {
+    const memory = memoryBackend();
+    const media = createMediaStore({ open: async () => memory.backend, maxBytes: 8 * MIB });
+    const b = backend({ media, fetch: async () => new Response(new Uint8Array(256), { headers: { "content-type": "image/jpeg" } }) });
+    await expect(createPanoramaResources(b.value, SETTINGS).acquire(photo, preview)).rejects.toBeInstanceOf(ResourceRefusal);
+    await media.settled();
+    expect((await media.inspect()).files).toBe(0);
   });
 });
