@@ -68,6 +68,24 @@ export function composeSheet(cubes, faceSize, quality = 80) {
 const previewCubes = asset => (asset.type === "panorama-image" ? asset.representations.filter(rep => rep.projection === "cube" && rep.role === "preview") : []);
 
 /**
+ * The extension a scene's sheets are written in, src/scenes/format.ts's
+ * PREVIEW_SHEETS_EXTENSION: on the scene, `{ sheets }`; on a cube, its place
+ * `{ id, x, y }`. A loader from before sheets refuses a property it does not
+ * know and skips an extension it does not know, so it loads the cubes' files.
+ */
+export const PREVIEW_SHEETS_EXTENSION = "foss-earth.preview-sheets";
+
+/** The sheets a scene names, and those of a scene written on 2026-10-03, which had them as properties of its own. */
+export const sheetsOf = document => [...(document.extensions?.[PREVIEW_SHEETS_EXTENSION]?.sheets ?? []), ...(document.sheets ?? [])];
+
+/** Takes the extension off a record, and the record's `extensions` with it when nothing else is in them. */
+function withoutSheets(record) {
+  if (!record.extensions) return;
+  delete record.extensions[PREVIEW_SHEETS_EXTENSION];
+  if (Object.keys(record.extensions).length === 0) delete record.extensions;
+}
+
+/**
  * A copy of `document` with sheets for its preview cubes of `faceSize` (left
  * out, each asset's smallest, where they are all one size), and the sheets'
  * files. `read(url)` gives a face file's bytes by its URL as the manifest
@@ -77,8 +95,12 @@ const previewCubes = asset => (asset.type === "panorama-image" ? asset.represent
  */
 export function addPreviewSheets(document, { read, faceSize, quality = 80, maxPixels = SHEET_PIXELS, urlPrefix = "media/" }) {
   const copy = JSON.parse(JSON.stringify(document));
+  withoutSheets(copy);
   delete copy.sheets;
-  for (const asset of copy.assets) for (const representation of asset.representations ?? []) delete representation.sheet;
+  for (const asset of copy.assets) for (const representation of asset.representations ?? []) {
+    withoutSheets(representation);
+    delete representation.sheet;
+  }
   const size = faceSize ?? Math.min(...copy.assets.flatMap(asset => previewCubes(asset).map(rep => rep.faceSize)));
   if (!Number.isFinite(size)) return { document: copy, files: [], cubes: 0 };
   const chosen = copy.assets.flatMap(asset => previewCubes(asset).filter(rep => rep.faceSize === size).slice(0, 1).map(representation => ({ asset, representation })));
@@ -100,20 +122,24 @@ export function addPreviewSheets(document, { read, faceSize, quality = 80, maxPi
     const url = `${urlPrefix}${id}.jpg`;
     sheets.push({ id, revision: sheet.revision, mimeType: "image/jpeg", width: sheet.width, height: sheet.height, encodedBytes: sheet.bytes.length, url });
     files.push({ url, bytes: sheet.bytes });
-    for (const { asset, representation } of group) representation.sheet = { id, ...sheet.places.get(asset.id) };
+    for (const { asset, representation } of group) representation.extensions = { ...representation.extensions, [PREVIEW_SHEETS_EXTENSION]: { id, ...sheet.places.get(asset.id) } };
   }
-  // After the assets, as the format lists it; a scene's other properties keep their order.
+  if (copy.extensions) {
+    copy.extensions[PREVIEW_SHEETS_EXTENSION] = { sheets };
+    return { document: copy, files, cubes: chosen.length };
+  }
+  // Before the assets, as the format lists a scene's extensions; its other properties keep their order.
   const ordered = {};
   for (const [key, value] of Object.entries(copy)) {
+    if (key === "assets") ordered.extensions = { [PREVIEW_SHEETS_EXTENSION]: { sheets } };
     ordered[key] = value;
-    if (key === "assets") ordered.sheets = sheets;
   }
   return { document: ordered, files, cubes: chosen.length };
 }
 
 /**
- * Whether each sheet shows what its cubes' face files show: every face in the
- * sheet against the file, as PSNR over the face, which a second JPEG encoding
+ * Whether each sheet of a scene's document shows what its cubes' face files
+ * show: every face in the sheet against the file, as PSNR over the face, which a second JPEG encoding
  * keeps above `minPsnrDb` and a face in the wrong place does not. Returns the
  * problems found, as `{ path, message }`, and the lowest PSNR seen.
  */
@@ -121,19 +147,20 @@ export function verifyPreviewSheets(document, read, minPsnrDb = 28) {
   const problems = [];
   let lowest = Number.POSITIVE_INFINITY;
   const decoded = new Map();
-  for (const sheet of document.sheets ?? []) {
+  for (const sheet of document.extensions?.[PREVIEW_SHEETS_EXTENSION]?.sheets ?? []) {
+    const path = `$.extensions.${PREVIEW_SHEETS_EXTENSION}.sheets[${sheet.id}].url`;
     const bytes = read(sheet.url);
-    if (!bytes) { problems.push({ path: `$.sheets[${sheet.id}].url`, message: `${sheet.url} does not exist` }); continue; }
-    try { decoded.set(sheet.id, decodeRgb(bytes, sheet.url)); } catch (error) { problems.push({ path: `$.sheets[${sheet.id}].url`, message: error.message }); }
+    if (!bytes) { problems.push({ path, message: `${sheet.url} does not exist` }); continue; }
+    try { decoded.set(sheet.id, decodeRgb(bytes, sheet.url)); } catch (error) { problems.push({ path, message: error.message }); }
   }
   for (const asset of document.assets ?? []) {
     for (const representation of asset.representations ?? []) {
-      const place = representation.sheet;
+      const place = representation.extensions?.[PREVIEW_SHEETS_EXTENSION];
       const sheet = place && decoded.get(place.id);
       if (!sheet) continue;
       const size = representation.faceSize;
       CUBE_FACE_NAMES.forEach((face, at) => {
-        const path = `$.assets[${asset.id}].representations[${representation.id}].sheet`;
+        const path = `$.assets[${asset.id}].representations[${representation.id}].extensions.${PREVIEW_SHEETS_EXTENSION}`;
         const bytes = read(representation.faces[face]);
         if (!bytes) return;
         const file = decodeRgb(bytes, representation.faces[face]);

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { CUBE_FACE_NAMES, decodeJpeg, encodeJpeg } from "./panoramaImage.mjs";
-import { addPreviewSheets, composeSheet, sheetColumns, verifyPreviewSheets } from "./previewSheet.mjs";
+import { addPreviewSheets, composeSheet, PREVIEW_SHEETS_EXTENSION, sheetColumns, sheetsOf, verifyPreviewSheets } from "./previewSheet.mjs";
+
+/** A cube's place in a sheet, and a scene's sheets, as the extension holds them. */
+const placeOf = representation => representation.extensions?.[PREVIEW_SHEETS_EXTENSION];
+const sheetsIn = document => document.extensions?.[PREVIEW_SHEETS_EXTENSION]?.sheets;
 
 const SIZE = 16;
 /** A face of one flat colour, as a JPEG. */
@@ -66,24 +70,55 @@ describe("adding sheets to a scene", () => {
     expect(added.cubes).toBe(3);
     expect(added.files.map(file => file.url)).toEqual(["media/previews-16.jpg"]);
     // Three cubes are less than a row of a square sheet: one column.
-    expect(added.document.sheets).toEqual([{ id: "previews-16", revision: expect.stringMatching(/^[0-9a-f]{12}$/), mimeType: "image/jpeg", width: 96, height: 48, encodedBytes: added.files[0].bytes.length, url: "media/previews-16.jpg" }]);
-    expect(added.document.assets.map(asset => asset.representations[0].sheet)).toEqual([{ id: "previews-16", x: 0, y: 0 }, { id: "previews-16", x: 0, y: 16 }, { id: "previews-16", x: 0, y: 32 }]);
+    expect(sheetsIn(added.document)).toEqual([{ id: "previews-16", revision: expect.stringMatching(/^[0-9a-f]{12}$/), mimeType: "image/jpeg", width: 96, height: 48, encodedBytes: added.files[0].bytes.length, url: "media/previews-16.jpg" }]);
+    expect(added.document.assets.map(asset => placeOf(asset.representations[0]))).toEqual([{ id: "previews-16", x: 0, y: 0 }, { id: "previews-16", x: 0, y: 16 }, { id: "previews-16", x: 0, y: 32 }]);
     expect(added.document.assets[0].representations[0].faces).toEqual(document.assets[0].representations[0].faces);
-    expect(added.document.assets[0].representations[1].sheet).toBeUndefined();
-    // Sheets come after the assets; the scene given is untouched.
-    expect(Object.keys(added.document)).toEqual(["format", "version", "id", "revision", "title", "assets", "sheets", "entities"]);
-    expect(document.sheets).toBeUndefined();
+    expect(added.document.assets[0].representations[1].extensions).toBeUndefined();
+    // In the scene's extensions, before the assets, and nowhere a loader from before sheets refuses; the scene given is untouched.
+    expect(Object.keys(added.document)).toEqual(["format", "version", "id", "revision", "title", "extensions", "assets", "entities"]);
+    expect(added.document.sheets).toBeUndefined();
+    expect(added.document.assets[0].representations[0].sheet).toBeUndefined();
+    expect(document.extensions).toBeUndefined();
+  });
+
+  it("keeps the extensions a scene and its cubes already had, and takes its own away with the last cube", () => {
+    const { document, files } = sceneOf(2);
+    const read = url => files.get(url) ?? null;
+    document.extensions = { "example.notes": { text: "kept" } };
+    document.assets[0].representations[0].extensions = { "example.notes": { text: "kept too" } };
+    const added = addPreviewSheets(document, { read });
+    expect(Object.keys(added.document.extensions)).toEqual(["example.notes", PREVIEW_SHEETS_EXTENSION]);
+    expect(added.document.assets[0].representations[0].extensions).toEqual({ "example.notes": { text: "kept too" }, [PREVIEW_SHEETS_EXTENSION]: { id: "previews-16", x: 0, y: 0 } });
+    // No cube of that size: the sheets go, and what was there before them stays.
+    const none = addPreviewSheets(added.document, { read, faceSize: 8 });
+    expect(none.files).toEqual([]);
+    expect(none.document.extensions).toEqual({ "example.notes": { text: "kept" } });
+    expect(none.document.assets[0].representations[0].extensions).toEqual({ "example.notes": { text: "kept too" } });
+    expect(none.document.assets[1].representations[0].extensions).toBeUndefined();
+  });
+
+  it("rewrites a scene of 2026-10-03, whose sheets were properties of its own", () => {
+    const { document, files } = sceneOf(2);
+    const read = url => files.get(url) ?? null;
+    const old = JSON.parse(JSON.stringify(document));
+    old.sheets = [{ id: "previews-16", revision: "r", mimeType: "image/jpeg", width: 96, height: 32, encodedBytes: 1, url: "media/old.jpg" }];
+    old.assets[0].representations[0].sheet = { id: "previews-16", x: 0, y: 0 };
+    expect(sheetsOf(old).map(sheet => sheet.url)).toEqual(["media/old.jpg"]);
+    const added = addPreviewSheets(old, { read });
+    expect(added.document.sheets).toBeUndefined();
+    expect(added.document.assets[0].representations[0].sheet).toBeUndefined();
+    expect(sheetsOf(added.document).map(sheet => sheet.url)).toEqual(["media/previews-16.jpg"]);
   });
 
   it("begins another sheet past the pixel limit, and replaces sheets the scene had", () => {
     const { document, files } = sceneOf(5);
     const read = url => files.get(url) ?? null;
     const twoEach = addPreviewSheets(document, { read, maxPixels: 2 * 6 * SIZE * SIZE });
-    expect(twoEach.document.sheets.map(sheet => sheet.id)).toEqual(["previews-16", "previews-16-2", "previews-16-3"]);
-    expect(twoEach.document.assets.map(asset => asset.representations[0].sheet.id)).toEqual(["previews-16", "previews-16", "previews-16-2", "previews-16-2", "previews-16-3"]);
+    expect(sheetsIn(twoEach.document).map(sheet => sheet.id)).toEqual(["previews-16", "previews-16-2", "previews-16-3"]);
+    expect(twoEach.document.assets.map(asset => placeOf(asset.representations[0]).id)).toEqual(["previews-16", "previews-16", "previews-16-2", "previews-16-2", "previews-16-3"]);
     const again = addPreviewSheets(twoEach.document, { read });
-    expect(again.document.sheets).toHaveLength(1);
-    expect(again.document.assets.every(asset => asset.representations[0].sheet.id === "previews-16")).toBe(true);
+    expect(sheetsIn(again.document)).toHaveLength(1);
+    expect(again.document.assets.every(asset => placeOf(asset.representations[0]).id === "previews-16")).toBe(true);
   });
 
   it("checks that each face in a sheet is the picture in its file", () => {
@@ -96,9 +131,9 @@ describe("adding sheets to a scene", () => {
     expect(good.lowestPsnrDb).toBeGreaterThan(35);
     // A cube given another's place shows another's faces.
     const swapped = JSON.parse(JSON.stringify(added.document));
-    swapped.assets[0].representations[0].sheet = { ...swapped.assets[1].representations[0].sheet };
+    swapped.assets[0].representations[0].extensions[PREVIEW_SHEETS_EXTENSION] = { ...placeOf(swapped.assets[1].representations[0]) };
     const bad = verifyPreviewSheets(swapped, all);
     expect(bad.problems).toHaveLength(6);
-    expect(bad.problems[0]).toMatchObject({ path: "$.assets[a0].representations[preview-16].sheet", message: expect.stringMatching(/not the same picture$/) });
+    expect(bad.problems[0]).toMatchObject({ path: `$.assets[a0].representations[preview-16].extensions.${PREVIEW_SHEETS_EXTENSION}`, message: expect.stringMatching(/not the same picture$/) });
   });
 });

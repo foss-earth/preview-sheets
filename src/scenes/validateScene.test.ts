@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { PREVIEW_SHEETS_EXTENSION, type ValidatedScene } from "./format";
 import { validateScene } from "./validateScene";
 
 const EXAMPLE_TEXT = readFileSync(new URL("./fixtures/proposal-example.scene.json", import.meta.url), "utf8");
@@ -34,6 +35,26 @@ function errorsOf(input: unknown, baseUrl: string | null = BASE): string[] {
   const result = validateScene(input, { baseUrl });
   return result.ok ? [] : result.errors.map(error => `${error.path}: ${error.message}`);
 }
+
+/** A preview sheet, and the proposal's example with it in the scene's extension and a place in its first cube's. */
+const SHEET = { id: "previews", revision: "s1", mimeType: "image/jpeg", width: 768, height: 256, encodedBytes: 5000, url: "media/previews.jpg" };
+const SHEET_CUBE = (get(example(), "assets.0.representations") as { projection: string }[]).findIndex(rep => rep.projection === "cube");
+const CUBE_SIZE = (get(example(), `assets.0.representations.${SHEET_CUBE}`) as { faceSize: number }).faceSize;
+
+function withSheet(place: unknown, sheets: unknown = [SHEET]): unknown {
+  const doc = example();
+  edit(doc, "extensions", { [PREVIEW_SHEETS_EXTENSION]: { sheets } });
+  edit(doc, `assets.0.representations.${SHEET_CUBE}.extensions`, { [PREVIEW_SHEETS_EXTENSION]: place });
+  return doc;
+}
+
+function sheetScene(place: unknown, sheets?: unknown): { scene: ValidatedScene } {
+  const result = validateScene(withSheet(place, sheets), { baseUrl: BASE });
+  if (!result.ok) throw new Error(JSON.stringify(result.errors));
+  return { scene: result.scene };
+}
+
+const sheetCube = (scene: ValidatedScene) => [...scene.assets.values()][0].representations.find(rep => rep.projection === "cube")!;
 
 describe("validateScene", () => {
   it("accepts the proposal's two-panorama example and resolves its media against the manifest", () => {
@@ -136,34 +157,58 @@ describe("validateScene", () => {
     expect(result.scene.warnings).toContainEqual({ path: "$.assets[0].representations[2].projection", message: "projection \"octahedral\" is not supported by this loader; this representation is skipped" });
   });
 
-  it("resolves a preview sheet into each cube that names its place in it, and checks the place", () => {
-    const SHEET = { id: "previews", revision: "s1", mimeType: "image/jpeg", width: 768, height: 256, encodedBytes: 5000, url: "media/previews.jpg" };
-    const withSheet = (place: unknown, sheets: unknown[] = [SHEET]): unknown => {
-      const doc = example();
-      edit(doc, "sheets", sheets);
-      const cube = (get(doc, "assets.0.representations") as { projection: string }[]).findIndex(rep => rep.projection === "cube");
-      edit(doc, `assets.0.representations.${cube}.sheet`, place);
-      return doc;
-    };
-    const cubeSize = ((get(example(), "assets.0.representations") as { projection: string; faceSize: number }[]).find(rep => rep.projection === "cube")!).faceSize;
-    const result = validateScene(withSheet({ id: "previews", x: 0, y: 256 - cubeSize }), { baseUrl: BASE });
-    if (!result.ok) throw new Error(JSON.stringify(result.errors));
-    expect([...result.scene.sheets.values()]).toEqual([{ ...SHEET, url: "https://scenes.example/neutral/media/previews.jpg" }]);
-    const cube = [...result.scene.assets.values()][0].representations.find(rep => rep.projection === "cube");
-    expect(cube).toMatchObject({ sheet: { id: "previews", revision: "s1", url: "https://scenes.example/neutral/media/previews.jpg", width: 768, height: 256, x: 0, y: 256 - cubeSize } });
+  it("resolves a preview sheet into each cube that names its place in it", () => {
+    const { scene } = sheetScene({ id: "previews", x: 0, y: 256 - CUBE_SIZE });
+    expect([...scene.sheets.values()]).toEqual([{ ...SHEET, url: "https://scenes.example/neutral/media/previews.jpg" }]);
+    expect(sheetCube(scene)).toMatchObject({ sheet: { id: "previews", revision: "s1", url: "https://scenes.example/neutral/media/previews.jpg", width: 768, height: 256, x: 0, y: 256 - CUBE_SIZE } });
+    expect(scene.warnings).toEqual([]);
+    // A scene may say a loader has to read sheets, though its cubes' own files make that needless.
+    const required = withSheet({ id: "previews", x: 0, y: 0 });
+    edit(required, "requiredExtensions", [PREVIEW_SHEETS_EXTENSION]);
+    expect(errorsOf(required)).toEqual([]);
     // A scene with no sheets has none, and its cubes no place.
     const plain = validateScene(EXAMPLE_TEXT, { baseUrl: BASE });
     expect(plain.ok && plain.scene.sheets.size).toBe(0);
+  });
 
-    expect(errorsOf(withSheet({ id: "other", x: 0, y: 0 }))).toEqual([expect.stringMatching(/sheet\.id: names "other", which is not a sheet of this scene$/)]);
-    expect(errorsOf(withSheet({ id: "previews", x: 768 - 6 * cubeSize + 1, y: 0 }))).toEqual([expect.stringMatching(/sheet: puts six \d+ px faces at \(\d+, 0\), outside the 768 × 256 px sheet "previews"$/)]);
-    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 256 - cubeSize + 1 }))).toHaveLength(1);
-    expect(errorsOf(withSheet({ id: "previews", x: 0.5, y: -1 }))).toEqual([expect.stringMatching(/sheet\.x: must be a whole number, 0 or more$/), expect.stringMatching(/sheet\.y: must be a whole number, 0 or more$/)]);
-    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 0, face: "px" }))).toEqual([expect.stringMatching(/sheet\.face: is not a property of this record/)]);
-    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 0 }, [SHEET, SHEET]))).toEqual([expect.stringMatching(/^\$\.sheets\[1\]\.id: repeats sheet id "previews"$/)]);
-    expect(errorsOf(withSheet({ id: "previews", x: 0, y: 0 }, [{ ...SHEET, width: 0, revision: "" }]))).toEqual(expect.arrayContaining([
-      expect.stringMatching(/^\$\.sheets\[0\]\.revision: /), expect.stringMatching(/^\$\.sheets\[0\]\.width: must be a positive whole number$/),
-    ]));
+  it("leaves a sheet or a place that is wrong unused, with a warning, and loads the scene: the cube's own files are there", () => {
+    const place = `$.assets[0].representations[${SHEET_CUBE}].extensions.${PREVIEW_SHEETS_EXTENSION}`;
+    const sheets = `$.extensions.${PREVIEW_SHEETS_EXTENSION}.sheets`;
+    const unusedPlace = (given: unknown, listed: unknown = [SHEET]): string[] => {
+      const { scene } = sheetScene(given, listed);
+      expect(sheetCube(scene)).not.toHaveProperty("sheet");
+      expect(sheetCube(scene)).toMatchObject({ faces: { px: expect.stringMatching(/px\.jpg$/) } });
+      return scene.warnings.map(warning => `${warning.path}: ${warning.message}`);
+    };
+    const files = "; this cube loads from its own files";
+    expect(unusedPlace({ id: "other", x: 0, y: 0 })).toEqual([`${place}.id: names "other", which is not a sheet of this scene${files}`]);
+    expect(unusedPlace({ id: "previews", x: 768 - 6 * CUBE_SIZE + 1, y: 0 })).toEqual([`${place}: puts six ${CUBE_SIZE} px faces at (${768 - 6 * CUBE_SIZE + 1}, 0), outside the 768 × 256 px sheet "previews"${files}`]);
+    expect(unusedPlace({ id: "previews", x: 0, y: 256 - CUBE_SIZE + 1 })).toHaveLength(1);
+    expect(unusedPlace({ id: "previews", x: 0.5, y: -1 })).toEqual([`${place}.x: must be a whole number, 0 or more${files}`, `${place}.y: must be a whole number, 0 or more${files}`]);
+    // A place written for a later loader: this one cannot tell what the property changes, so it does not guess.
+    expect(unusedPlace({ id: "previews", x: 0, y: 0, face: "px" })).toEqual([expect.stringMatching(/\.face: is not a property of this record.*; this cube loads from its own files$/)]);
+    // A sheet that is wrong is not one of the scene's, and the cube that names it says so.
+    expect(unusedPlace({ id: "previews", x: 0, y: 0 }, [{ ...SHEET, width: 0, revision: "" }])).toEqual([
+      expect.stringMatching(/sheets\[0\]\.revision: .*; this preview sheet is not used$/),
+      `${sheets}[0].width: must be a positive whole number; this preview sheet is not used`,
+      `${place}.id: names "previews", which is not a sheet of this scene${files}`,
+    ]);
+    expect(unusedPlace({ id: "previews", x: 0, y: 0 }, "previews.jpg")).toEqual([`${sheets}: must be an array; this preview sheet is not used`, expect.stringContaining("which is not a sheet of this scene")]);
+
+    // The second sheet of one id is left out; the first serves the cube.
+    const twice = sheetScene({ id: "previews", x: 0, y: 0 }, [SHEET, { ...SHEET, url: "media/other.jpg" }]).scene;
+    expect(twice.warnings).toEqual([{ path: `${sheets}[1].id`, message: "repeats sheet id \"previews\"; this preview sheet is not used" }]);
+    expect(sheetCube(twice)).toMatchObject({ sheet: { url: "https://scenes.example/neutral/media/previews.jpg" } });
+  });
+
+  it("refuses sheets written as the scene's and the cube's own properties, as scenes of 2026-10-03 had them", () => {
+    const doc = example();
+    edit(doc, "sheets", [SHEET]);
+    edit(doc, `assets.0.representations.${SHEET_CUBE}.sheet`, { id: "previews", x: 0, y: 0 });
+    expect(errorsOf(doc)).toEqual([
+      "$.sheets: is not a property of this record; namespaced additions belong in \"extensions\"",
+      `$.assets[0].representations[${SHEET_CUBE}].sheet: is not a property of this record; namespaced additions belong in "extensions"`,
+    ]);
   });
 
   it("needs a preview cube, unique ids and existing references", () => {
