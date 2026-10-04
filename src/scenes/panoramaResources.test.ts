@@ -20,6 +20,7 @@ const rep = (asset: ResolvedAsset, id: string): ResolvedRepresentation => asset.
 const SETTINGS: ResourceSettings = {
   limits: { sourceGpu: 128 * MIB, overlap: 48 * MIB, decoded: 64 * MIB, encoded: 32 * MIB, uploadOutstanding: 16 * MIB },
   responseBytes: 16 * MIB, requests: 4, decodes: 1, timeoutMs: 30_000, immersionWidth: Number.POSITIVE_INFINITY,
+  tileMemoryBytes: 32 * MIB, keptBytes: Number.POSITIVE_INFINITY, previewSheets: false,
 };
 
 interface FakeTexture extends GpuSource { disposed: boolean }
@@ -132,6 +133,36 @@ describe("panorama resources", () => {
     const other = await resources.acquire(photo, rep(photo, "preview-128"));
     expect(b.textures[0].disposed).toBe(true);
     other.release();
+  });
+
+  it("keeps what nobody shows only within the kept allowance, the source unused longest going first", async () => {
+    const b = backend();
+    const gridPreview = rep(grid, "preview-128");
+    const photoPreview = rep(photo, "preview-128");
+    const bytes = representationGpuBytes(gridPreview);
+    expect(representationGpuBytes(photoPreview)).toBe(bytes);
+    const resources = createPanoramaResources(b.value, { ...SETTINGS, keptBytes: bytes });
+    const first = await resources.acquire(grid, gridPreview);
+    const second = await resources.acquire(photo, photoPreview);
+    first.release();
+    // Room for one: it stays, and a return to it asks for nothing.
+    expect(resources.stats()).toMatchObject({ keptSources: 1, keptBytes: bytes });
+    second.release();
+    // Two would pass the allowance: the one unused longer goes.
+    expect(b.textures.map(texture => texture.disposed)).toEqual([true, false]);
+    expect(resources.stats()).toMatchObject({ keptSources: 1, keptBytes: bytes, cachedSources: 1 });
+    const fetched = b.fetched.length;
+    (await resources.acquire(photo, photoPreview)).release();
+    expect(b.fetched.length).toBe(fetched);
+    // At 0 only what is shown stays.
+    resources.setSettings({ ...SETTINGS, keptBytes: 0 });
+    expect(resources.stats()).toMatchObject({ keptSources: 0, keptBytes: 0, cachedSources: 0 });
+    expect(b.textures.every(texture => texture.disposed)).toBe(true);
+    const held = await resources.acquire(grid, gridPreview);
+    expect(resources.stats().cachedSources).toBe(1);
+    held.release();
+    expect(resources.stats().cachedSources).toBe(0);
+    expect(resources.stats().pools.sourceGpu.reserved).toBe(0);
   });
 
   it("cancels a load nobody wants any more and releases everything, and a late upload cannot come back", async () => {
