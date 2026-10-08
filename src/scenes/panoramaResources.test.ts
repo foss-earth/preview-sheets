@@ -53,6 +53,10 @@ function backend(overrides: Partial<ResourceBackend<FakeTexture>> = {}) {
       textures.push(texture);
       return texture;
     },
+    // campus-pair has no tiled cube, so nothing here should ask for an atlas.
+    async createTiles(representation) {
+      throw new Error(`Unexpected tiled cube ${representation.id}: these tests load none`);
+    },
     maxTextureSide: () => 8192,
     ...overrides,
   };
