@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CUBE_FACE_NAMES, decodeJpeg, encodeJpeg } from "./panoramaImage.mjs";
-import { addPreviewSheets, composeSheet, PREVIEW_SHEETS_EXTENSION, sheetColumns, sheetsOf, verifyPreviewSheets } from "./previewSheet.mjs";
+import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { decodeJpeg, encodeJpeg } from "@foss-earth/images/node";
+import { addPreviewSheets, composeSheet, extractSheetFaces, PREVIEW_SHEETS_EXTENSION, sheetColumns, sheetsOf, verifyPreviewSheets } from "../node/preparation.mjs";
 
 /** A cube's place in a sheet, and a scene's sheets, as the extension holds them. */
 const placeOf = representation => representation.extensions?.[PREVIEW_SHEETS_EXTENSION];
@@ -60,6 +61,15 @@ describe("a preview sheet", () => {
   it("refuses faces of another size, and sizes a JPEG block would straddle", () => {
     expect(() => composeSheet([{ key: "a", faces: cubeFaces(0) }], 32)).toThrow(/is 16 × 16 px, not 32/);
     expect(() => composeSheet([{ key: "a", faces: cubeFaces(0) }], 20)).toThrow(/multiple of 8/);
+  });
+
+  it("extracts unrotated source-face rectangles and refuses outside locations", () => {
+    const rgb = new Uint8Array(6 * SIZE * SIZE * 3);
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < 6 * SIZE; x++) rgb[(y * 6 * SIZE + x) * 3] = Math.floor(x / SIZE);
+    const image = { width: 6 * SIZE, height: SIZE, rgb };
+    const faces = extractSheetFaces(image, { x: 0, y: 0 }, SIZE);
+    expect(CUBE_FACE_NAMES.map(face => faces[face].rgb[0])).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(() => extractSheetFaces(image, { x: 1, y: 0 }, SIZE)).toThrow(/inside/);
   });
 });
 
@@ -121,6 +131,15 @@ describe("adding sheets to a scene", () => {
     expect(again.document.assets.every(asset => placeOf(asset.representations[0]).id === "previews-16")).toBe(true);
   });
 
+  it("counts unfilled padded cells inside the supplied whole-sheet pixel limit", () => {
+    const { document, files } = sceneOf(7);
+    const maxPixels = 7 * 6 * SIZE * SIZE;
+    const added = addPreviewSheets(document, { read: url => files.get(url), maxPixels });
+    expect(sheetsIn(added.document)).toHaveLength(2);
+    expect(sheetsIn(added.document).every(sheet => sheet.width * sheet.height <= maxPixels)).toBe(true);
+    expect(() => addPreviewSheets(document, { read: url => files.get(url), maxPixels: 5 * SIZE * SIZE })).toThrow(/one preview cube/);
+  });
+
   it("checks that each face in a sheet is the picture in its file", () => {
     const { document, files } = sceneOf(3);
     const read = url => files.get(url) ?? null;
@@ -135,5 +154,14 @@ describe("adding sheets to a scene", () => {
     const bad = verifyPreviewSheets(swapped, all);
     expect(bad.problems).toHaveLength(6);
     expect(bad.problems[0]).toMatchObject({ path: `$.assets[a0].representations[preview-16].extensions.${PREVIEW_SHEETS_EXTENSION}`, message: expect.stringMatching(/not the same picture$/) });
+  });
+
+  it("reports unavailable original files and outside places instead of accepting missing comparisons", () => {
+    const { document, files } = sceneOf(1);
+    const added = addPreviewSheets(document, { read: url => files.get(url), quality: 95 });
+    const all = url => added.files.find(file => file.url === url)?.bytes ?? files.get(url);
+    expect(verifyPreviewSheets(added.document, url => url.endsWith('/px.jpg') ? null : all(url)).problems).toHaveLength(1);
+    placeOf(added.document.assets[0].representations[0]).x = 1000;
+    expect(verifyPreviewSheets(added.document, all).problems[0].message).toMatch(/inside the decoded sheet/);
   });
 });

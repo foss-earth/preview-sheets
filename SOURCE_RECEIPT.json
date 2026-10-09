@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "owner": "foss-earth/preview-sheets",
+  "preparedAtUtc": "2026-10-09T19-58-30Z",
+  "status": "SOURCE-ONLY current bytes; checks/history/installed consumers/artifacts/adoption/admission UNRUN",
+  "sourceRevision": "90e23b3ee96f53ec5900afc5991a21fffa58649d",
+  "priorSourceReceipt": "build/source-only/2026-10-09T19-58-30Z/SOURCE_RECEIPT.json.before",
+  "sourceManifestPath": "build/source-only/2026-10-09T19-58-30Z/source-manifest.json",
+  "sourceManifestEncoding": "UTF-8 sorted path JSON array, indent2, trailing LF; ignored outputs and receipt excluded",
+  "sourceManifestSha256": "e56c54b3b2787b9a225c9be494ff143515d8082997266b80f392553eafd36209",
+  "sourceFileCount": 40,
+  "provenancePath": "SOURCE_PROVENANCE.json",
+  "provenanceSha256": "64607a0901df252fc1b71bca9dd5a1d76b75714ae14eee0e98b0e1f43a1e48bc",
+  "publicExports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    },
+    "./preparation": {
+      "types": "./node/preparation.d.mts",
+      "import": "./node/preparation.mjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./schema/extension.json": "./schema/extension.json",
+    "./schema/place.json": "./schema/place.json",
+    "./scene-extension": {
+      "types": "./dist/sceneExtension.d.ts",
+      "import": "./dist/sceneExtension.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "import": "./dist/settings.js"
+    }
+  },
+  "bins": {},
+  "sourceFiles": [
+    {
+      "path": ".attribution-release.json",
+      "sha256": "c5324ea9476d99afbc5f63e9d5a15d597dd7ee27546499c392046b55fc361131",
+      "bytes": 2045
+    },
+    {
+      "path": ".attribution.json",
+      "sha256": "e4493f3031a5051398339cf9649a8e18efb8ece96f512761d8d145daf8347f7a",
+      "bytes": 491
+    },
+    {
+      "path": ".github/workflows/attribution-check.yml",
+      "sha256": "63349507da9d004752bb0e43c681089dfd9fd6c26bf8047738cb19025f15135e",
+      "bytes": 406
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "1b4079eca6a59266c39bd6876e60883ddac3956a939e578baec911d88b55ce85",
+      "bytes": 27
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "85eda2b7ca0f62daec6a079df415d34b02e90e38e69d792640033afcb7aac09b",
+      "bytes": 572
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "sha256": "c3a907b9e659a0f5a4c701be1b34a7d416526c3a99f129bf4d3b9db09c7ffa9d",
+      "bytes": 3442
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "28918888aab09f071eb204e2312c5590f074bf33776a47626057ed6fd6bc397d",
+      "bytes": 2612
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0",
+      "bytes": 34523
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "323da85db96d02ed0cf48db889efa184037f538f002e868aeeff396ebb44a993",
+      "bytes": 359
+    },
+    {
+      "path": "README.md",
+      "sha256": "6940baf4fa26429f6939bb43bf6195746e2271753214c2192a5b86ac5370b857",
+      "bytes": 10488
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "6baf6d3c1755360f5d902275c893074fd17af2fc10c140fe932b8a90d77d9942",
+      "bytes": 791
+    },
+    {
+      "path": "SOURCE_LINEAGE.json",
+      "sha256": "08d85ad3cb1b0468aaa492151bb12be1acefdf014b410ee625d0236ac552612d",
+      "bytes": 7202
+    },
+    {
+      "path": "SOURCE_PROVENANCE.json",
+      "sha256": "64607a0901df252fc1b71bca9dd5a1d76b75714ae14eee0e98b0e1f43a1e48bc",
+      "bytes": 29173
+    },
+    {
+      "path": "docs/admission.md",
+      "sha256": "155ea376f55b1d8a9376c5d606a94b9d645b602e13308db091d3ce293c77f352",
+      "bytes": 1280
+    },
+    {
+      "path": "docs/native-input-lifetime.md",
+      "sha256": "6a0652129f099fec4fb6147ef9112e797eb56fe1beafc01f43dfa0a625a47ecd",
+      "bytes": 4067
+    },
+    {
+      "path": "eslint.config.js",
+      "sha256": "6392b05308c0b3b3528120361dad3b6d0441f70fcc83567782f76fcae135dc57",
+      "bytes": 630
+    },
+    {
+      "path": "node/preparation.d.mts",
+      "sha256": "36b984efa736a6ac161a76df44c557e56932c1b16a8f7bdf413c6ef395f10ba1",
+      "bytes": 2410
+    },
+    {
+      "path": "node/preparation.mjs",
+      "sha256": "d5c715d82f3c66976a24bd4416485286d81d476f54f8121671d6d7aa573147e0",
+      "bytes": 12441
+    },
+    {
+      "path": "package.json",
+      "sha256": "5115487ded36cb19c16378c29b99351c9cc59bd74a2285895858c93d3a6cee9d",
+      "bytes": 3194
+    },
+    {
+      "path": "schema/extension.json",
+      "sha256": "469afee0c31b7043c393fb408025d03a68694aefe01fb0918e46941bafd30ff7",
+      "bytes": 1373
+    },
+    {
+      "path": "schema/place.json",
+      "sha256": "eae82f1361416478c155efde1837dab8e287d19116943bd67384151e96937aa7",
+      "bytes": 552
+    },
+    {
+      "path": "scripts/check-installed-artifact.mjs",
+      "sha256": "690557a9257d8e5d687541e5232d0741f66b30d148626974667d58f46ec86f1b",
+      "bytes": 16307
+    },
+    {
+      "path": "scripts/check-isolated-archive.mjs",
+      "sha256": "bde6a165f6490ca76d772332f6f9be69c541a7e7b82eac5f21494e5279371ea9",
+      "bytes": 5876
+    },
+    {
+      "path": "scripts/check-public-consumer.mjs",
+      "sha256": "e67f427d1dae205c02e90b5cc23ebd233bfdf6ef6185dccf75259ce00079f2a5",
+      "bytes": 5965
+    },
+    {
+      "path": "src/browser.ts",
+      "sha256": "7c0ed96f58e5309e3814da644f915e4be2960f84934d8d4e037b7f3450f5ab7b",
+      "bytes": 15599
+    },
+    {
+      "path": "src/core.ts",
+      "sha256": "feae3e8dea4a4345905e5c6a71f7af6e71bb7c176cfff2d0eb4ab3ec452fbf09",
+      "bytes": 1788
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "0f49e81961745e3090466b166d0fe191b088e92e560ccdc8a3bcd742354d6224",
+      "bytes": 145
+    },
+    {
+      "path": "src/sceneExtension.ts",
+      "sha256": "96ab09f3e6bb5960553e5e7b3d006a26cc380b228ac427314601660c4cd8eed6",
+      "bytes": 2188
+    },
+    {
+      "path": "src/schema.ts",
+      "sha256": "004eb8995a9352965f302891472cc95bf04b1392e61ca479fd12cb1fe9d8e432",
+      "bytes": 5243
+    },
+    {
+      "path": "src/settings.ts",
+      "sha256": "b35d45f042504afa132aa09123bb493dab343a544c0f506af35f713c5f5bac27",
+      "bytes": 1080
+    },
+    {
+      "path": "tests/browser.test.ts",
+      "sha256": "dc774027347ad0e93bd2e9abbe5ff89e9fbc730dc3f8c3825e08f3be582e39b5",
+      "bytes": 13106
+    },
+    {
+      "path": "tests/common-services.test.ts",
+      "sha256": "3e59108e522a2b6f2d67a76b85f5ae34857ef9056b866b560135a8c86e175526",
+      "bytes": 27577
+    },
+    {
+      "path": "tests/consumer.ts",
+      "sha256": "d7121ad08c278cd7c185f12fc844659b186d69f4520f73a1fd572b0ca8209b73",
+      "bytes": 2565
+    },
+    {
+      "path": "tests/preparation.test.mjs",
+      "sha256": "345873df930523110e05127fca2a8bc0b9fb20415fb6b938722452fa7e5dfc38",
+      "bytes": 10970
+    },
+    {
+      "path": "tests/sceneExtension.test.ts",
+      "sha256": "f1311ae2e604d75b2000e11d2bdc0cea9233197de78db159509089db667b7264",
+      "bytes": 1671
+    },
+    {
+      "path": "tests/schema.test.ts",
+      "sha256": "7a7e851de1700b768f5bfa09a4f1a5873b1b853184b3c454b8e65c481675311a",
+      "bytes": 2957
+    },
+    {
+      "path": "tests/settings.test.ts",
+      "sha256": "873da2a30e2f44a9c45f09139aabd4fc80fc92390db641d759a7d280cd2c0d38",
+      "bytes": 601
+    },
+    {
+      "path": "tests/tsconfig.json",
+      "sha256": "7c4a3979e1f054cf5f7de4f4c9b197dba7bc153cd82df7bb15538ce8d4b5abc4",
+      "bytes": 358
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "004b4a9b4c500c3e49b34dcf8b2f5ff03711b76a0aa685abb605bc8a6a72ebd6",
+      "bytes": 381
+    },
+    {
+      "path": "vitest.config.ts",
+      "sha256": "fe5ddb55ea6f13133e717457a8a497b0cf17b178fbcdb91d45b3dd9bcc657226",
+      "bytes": 281
+    }
+  ],
+  "frozenFoundation": null,
+  "sharedCi": {
+    "revision": "9e046dd482e0229dc7c7b2d71b079d5905664656",
+    "archiveSha256": "450ede699f55f9b9c78146eadb73de7c6297e56553e7d7f9e5b164786a7beb24",
+    "policySha256": "9ca88bf5861685e22e65e5f39fa65b05faaf9c218875fccbecce1b9f2dca5bd3",
+    "callerSha256": "63349507da9d004752bb0e43c681089dfd9fd6c26bf8047738cb19025f15135e",
+    "installedConformance": null,
+    "fullIntendedRefAudit": null,
+    "actualRemoteAdmissionVerified": false,
+    "docsOnlyMetadataSkipped": false
+  },
+  "checksExecuted": [],
+  "currentArtifact": null,
+  "acceptedArtifacts": [],
+  "actualConsumerAdoption": null,
+  "rollback": "Canonical original application remains live; frozen prior artifacts and earlier exact source receipts retained. New source has not replaced or retired any consumer.",
+  "outstandingBlockers": [
+    "granted bounded owner and actual public-only consumer checks",
+    "exact replacement prerequisites",
+    "source/API/CSS link/asset compatibility",
+    "expanded clean lineage and actual complete intended publication scopes",
+    "actual installed CI conformance",
+    "final source/archive/export seals",
+    "actual app adoption",
+    "coordinator public transport and remote admission"
+  ],
+  "policySentence": "You cannot have AI as a co-author, or your contributions will be rejected."
+}

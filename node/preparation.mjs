@@ -6,7 +6,10 @@
  * read sheets and for when a sheet fails.
  */
 import { createHash } from "node:crypto";
-import { CUBE_FACE_NAMES, decodeJpeg, decodePng, encodeJpeg, sniffImage } from "./panoramaImage.mjs";
+import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { decodeJpeg, decodePng, encodeJpeg, sniffImage, cropImage } from "@foss-earth/images/node";
+import { PREVIEW_SHEETS_EXTENSION } from "../dist/core.js";
+export { PREVIEW_SHEETS_EXTENSION };
 
 /** A JPEG block: faces at multiples of it share no block with a neighbour, so none bleeds into another. */
 const JPEG_BLOCK = 8;
@@ -15,6 +18,7 @@ export const SHEET_PIXELS = 4_000_000;
 
 /** A file's pixels as RGB, whatever it is. */
 function decodeRgb(bytes, what) {
+  bytes = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const kind = sniffImage(bytes);
   if (!kind) throw new Error(`${what} is neither a JPEG nor a PNG`);
   const { width, height, rgba } = kind === "image/png" ? decodePng(bytes) : decodeJpeg(bytes);
@@ -29,6 +33,7 @@ function decodeRgb(bytes, what) {
 
 /** Columns that make a sheet of `count` cubes, each six faces wide and one high, about square. */
 export function sheetColumns(count) {
+  if (!Number.isSafeInteger(count) || count < 0) throw new RangeError("A sheet's cube count must be a nonnegative whole number");
   return Math.max(1, Math.ceil(Math.sqrt(count / CUBE_FACE_NAMES.length)));
 }
 
@@ -41,6 +46,8 @@ export function sheetColumns(count) {
 export function composeSheet(cubes, faceSize, quality = 80) {
   if (cubes.length === 0) throw new Error("A sheet needs at least one cube");
   if (!Number.isInteger(faceSize) || faceSize <= 0 || faceSize % JPEG_BLOCK !== 0) throw new Error(`A sheet's faces must be a multiple of ${JPEG_BLOCK} px, so no JPEG block spans two of them; got ${faceSize}`);
+  if (!Number.isFinite(quality) || quality < 1 || quality > 100) throw new RangeError("JPEG quality must be from 1 to 100");
+  if (new Set(cubes.map(cube => cube.key)).size !== cubes.length) throw new Error("A sheet cannot contain duplicate cube keys");
   const columns = sheetColumns(cubes.length);
   const rows = Math.ceil(cubes.length / columns);
   const cell = CUBE_FACE_NAMES.length * faceSize;
@@ -73,7 +80,7 @@ const previewCubes = asset => (asset.type === "panorama-image" ? asset.represent
  * `{ id, x, y }`. A loader from before sheets refuses a property it does not
  * know and skips an extension it does not know, so it loads the cubes' files.
  */
-export const PREVIEW_SHEETS_EXTENSION = "foss-earth.preview-sheets";
+
 
 /** The sheets a scene names, and those of a scene written on 2026-10-03, which had them as properties of its own. */
 export const sheetsOf = document => [...(document.extensions?.[PREVIEW_SHEETS_EXTENSION]?.sheets ?? []), ...(document.sheets ?? [])];
@@ -94,6 +101,7 @@ function withoutSheets(record) {
  * Returns `{ document, files: [{ url, bytes }], cubes }`.
  */
 export function addPreviewSheets(document, { read, faceSize, quality = 80, maxPixels = SHEET_PIXELS, urlPrefix = "media/" }) {
+  if (!Number.isSafeInteger(maxPixels) || maxPixels < 1) throw new RangeError("maxPixels must be a positive whole-number pixel limit");
   const copy = JSON.parse(JSON.stringify(document));
   withoutSheets(copy);
   delete copy.sheets;
@@ -105,7 +113,11 @@ export function addPreviewSheets(document, { read, faceSize, quality = 80, maxPi
   if (!Number.isFinite(size)) return { document: copy, files: [], cubes: 0 };
   const chosen = copy.assets.flatMap(asset => previewCubes(asset).filter(rep => rep.faceSize === size).slice(0, 1).map(representation => ({ asset, representation })));
   if (chosen.length === 0) return { document: copy, files: [], cubes: 0 };
-  const perSheet = Math.max(1, Math.floor(maxPixels / (CUBE_FACE_NAMES.length * size * size)));
+  let perSheet = Math.floor(maxPixels / (CUBE_FACE_NAMES.length * size * size));
+  if (perSheet < 1) throw new RangeError("The pixel limit cannot hold one preview cube");
+  // Padded cells count too: the host's limit is the whole decoded sheet.
+  const pixelsFor = count => sheetColumns(count) * CUBE_FACE_NAMES.length * size * Math.ceil(count / sheetColumns(count)) * size;
+  while (pixelsFor(perSheet) > maxPixels) perSheet -= 1;
   const sheets = [];
   const files = [];
   for (let start = 0; start < chosen.length; start += perSheet) {
@@ -144,6 +156,7 @@ export function addPreviewSheets(document, { read, faceSize, quality = 80, maxPi
  * problems found, as `{ path, message }`, and the lowest PSNR seen.
  */
 export function verifyPreviewSheets(document, read, minPsnrDb = 28) {
+  if (!Number.isFinite(minPsnrDb) || minPsnrDb < 0) throw new RangeError("The PSNR limit must be nonnegative finite dB");
   const problems = [];
   let lowest = Number.POSITIVE_INFINITY;
   const decoded = new Map();
@@ -155,15 +168,25 @@ export function verifyPreviewSheets(document, read, minPsnrDb = 28) {
   }
   for (const asset of document.assets ?? []) {
     for (const representation of asset.representations ?? []) {
+      if (representation.projection !== "cube") continue;
       const place = representation.extensions?.[PREVIEW_SHEETS_EXTENSION];
       const sheet = place && decoded.get(place.id);
       if (!sheet) continue;
       const size = representation.faceSize;
+      const path = `$.assets[${asset.id}].representations[${representation.id}].extensions.${PREVIEW_SHEETS_EXTENSION}`;
+      if (!Number.isSafeInteger(size) || size < 1 || !Number.isSafeInteger(place.x) || place.x < 0 || !Number.isSafeInteger(place.y) || place.y < 0 || place.x + CUBE_FACE_NAMES.length * size > sheet.width || place.y + size > sheet.height) {
+        problems.push({ path, message: "the cube's six faces do not lie inside the decoded sheet" });
+        continue;
+      }
       CUBE_FACE_NAMES.forEach((face, at) => {
-        const path = `$.assets[${asset.id}].representations[${representation.id}].extensions.${PREVIEW_SHEETS_EXTENSION}`;
-        const bytes = read(representation.faces[face]);
-        if (!bytes) return;
-        const file = decodeRgb(bytes, representation.faces[face]);
+        const url = representation.faces?.[face];
+        if (typeof url !== "string") { problems.push({ path, message: `the cube has no ${face} original face file` }); return; }
+        const bytes = read(url);
+        if (!bytes) { problems.push({ path, message: `${representation.faces[face]} does not exist` }); return; }
+        let file;
+        try { file = decodeRgb(bytes, representation.faces[face]); }
+        catch (error) { problems.push({ path, message: error.message }); return; }
+        if (file.width !== size || file.height !== size) { problems.push({ path, message: `${representation.faces[face]} is not ${size} × ${size} px` }); return; }
         let squared = 0;
         for (let row = 0; row < size; row++) {
           for (let column = 0; column < size * 3; column++) {
@@ -179,4 +202,10 @@ export function verifyPreviewSheets(document, read, minPsnrDb = 28) {
     }
   }
   return { problems, lowestPsnrDb: lowest };
+}
+
+/** Pure extraction of a decoded RGB sheet; no GPU upload or scene interpretation. */
+export function extractSheetFaces(image, place, faceSize) {
+  if (!Number.isSafeInteger(faceSize) || faceSize < 1 || !Number.isSafeInteger(place.x) || place.x < 0 || !Number.isSafeInteger(place.y) || place.y < 0 || place.x + CUBE_FACE_NAMES.length * faceSize > image.width || place.y + faceSize > image.height) throw new RangeError("The cube's six faces must lie inside the decoded sheet");
+  return Object.fromEntries(CUBE_FACE_NAMES.map((face, index) => [face, cropImage(image, place.x + index * faceSize, place.y, faceSize, faceSize)]));
 }
