@@ -7,7 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
-import { decodeJpeg, decodePng, encodeJpeg, sniffImage, cropImage } from "@foss-earth/images/node";
+import { decodeJpeg, decodePng, encodeJpeg, sniffImage, cropImage, inspectImageDecode, ImageDecodeLimitError } from "@foss-earth/images/node";
 import { PREVIEW_SHEETS_EXTENSION } from "../dist/core.js";
 export { PREVIEW_SHEETS_EXTENSION };
 
@@ -155,53 +155,88 @@ export function addPreviewSheets(document, { read, faceSize, quality = 80, maxPi
  * keeps above `minPsnrDb` and a face in the wrong place does not. Returns the
  * problems found, as `{ path, message }`, and the lowest PSNR seen.
  */
-export function verifyPreviewSheets(document, read, minPsnrDb = 28) {
+export const DEFAULT_PREVIEW_SHEET_VERIFICATION_LIMITS = Object.freeze({
+  maxAssets: 2000, maxSheets: 128, maxRepresentations: 8000, maxFiles: 50000,
+  maxEncodedBytes: 32 * 1024 * 1024, maxInputBytes: 512 * 1024 * 1024,
+  maxMemoryBytes: 128 * 1024 * 1024, maxDecodedPixels: 64000000, maxWorkPixels: 128000000,
+  maxMetadataBytes: 256 * 1024, maxChunks: 10000,
+});
+export class PreviewSheetVerificationLimitError extends RangeError {
+  constructor(message) { super(message); this.name = "PreviewSheetVerificationLimitError"; }
+}
+/** Synchronous bounded jobs. Cancellation cannot interrupt an active native codec call. */
+export function verifyPreviewSheets(document, read, minPsnrDb = 28, options = {}) {
   if (!Number.isFinite(minPsnrDb) || minPsnrDb < 0) throw new RangeError("The PSNR limit must be nonnegative finite dB");
-  const problems = [];
-  let lowest = Number.POSITIVE_INFINITY;
-  const decoded = new Map();
-  for (const sheet of document.extensions?.[PREVIEW_SHEETS_EXTENSION]?.sheets ?? []) {
-    const path = `$.extensions.${PREVIEW_SHEETS_EXTENSION}.sheets[${sheet.id}].url`;
-    const bytes = read(sheet.url);
-    if (!bytes) { problems.push({ path, message: `${sheet.url} does not exist` }); continue; }
-    try { decoded.set(sheet.id, decodeRgb(bytes, sheet.url)); } catch (error) { problems.push({ path, message: error.message }); }
+  const limits = { ...DEFAULT_PREVIEW_SHEET_VERIFICATION_LIMITS, ...options };
+  for (const key of Object.keys(DEFAULT_PREVIEW_SHEET_VERIFICATION_LIMITS)) if (!Number.isSafeInteger(limits[key]) || limits[key] < 1) throw new RangeError(`${key} must be a positive safe integer`);
+  const abort = () => { if (options.signal?.aborted) throw options.signal.reason ?? new DOMException("Preview verification cancelled", "AbortError"); };
+  const admit = (value, maximum, name) => { if (!Number.isSafeInteger(value) || value > maximum) throw new PreviewSheetVerificationLimitError(`Preview ${name} budget exceeded`); };
+  const stats = { files: 0, inputBytes: 0, decodedPixels: 0, workPixels: 0, retainedSheetBytes: 0, peakWorkingBytes: 0, representations: 0 };
+  const work = pixels => { admit(stats.workPixels + pixels, limits.maxWorkPixels, "work pixels"); stats.workPixels += pixels; };
+  const decode = (url, expected) => {
+    abort(); admit(++stats.files, limits.maxFiles, "files");
+    const bytes = read(url); abort();
+    if (!(bytes instanceof Uint8Array)) throw new Error(`${url} does not exist`);
+    admit(bytes.length, limits.maxEncodedBytes, "encoded bytes");
+    admit(stats.inputBytes + bytes.length, limits.maxInputBytes, "input bytes"); stats.inputBytes += bytes.length;
+    if (expected && bytes.length !== expected.encodedBytes) throw new Error(`${url} byte length differs from sheet metadata`);
+    const available = limits.maxMemoryBytes - stats.retainedSheetBytes, pixels = limits.maxDecodedPixels - stats.decodedPixels;
+    if (available < 1 || pixels < 1) throw new PreviewSheetVerificationLimitError("Preview retained sheets/decoded pixels budget exceeded");
+    const codecOptions = { maxEncodedBytes: limits.maxEncodedBytes, maxPixels: pixels, maxMemoryBytes: available, maxMetadataBytes: limits.maxMetadataBytes, maxChunks: limits.maxChunks, signal: options.signal };
+    const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let plan;
+    try { plan = inspectImageDecode(buffer, codecOptions); }
+    catch (error) { if (error instanceof ImageDecodeLimitError) throw new PreviewSheetVerificationLimitError(error.message); throw error; }
+    if (expected && (plan.width !== expected.width || plan.height !== expected.height || plan.mimeType !== expected.mimeType)) throw new Error(`${url} header differs from sheet metadata`);
+    stats.decodedPixels += plan.pixels; work(plan.pixels);
+    stats.peakWorkingBytes = Math.max(stats.peakWorkingBytes, stats.retainedSheetBytes + plan.workingBytes);
+    let image;
+    try { image = plan.mimeType === "image/png" ? decodePng(buffer, codecOptions) : decodeJpeg(buffer, codecOptions); }
+    catch (error) { if (error instanceof ImageDecodeLimitError || /maxMemoryUsageInMB|maxResolutionInMP/.test(error.message)) throw new PreviewSheetVerificationLimitError(error.message); throw error; }
+    abort(); return { width: image.width, height: image.height, rgba: image.rgba };
+  };
+  const problems = [], decoded = new Map(); let lowest = Number.POSITIVE_INFINITY;
+  const report = (error, path) => { abort(); if (error instanceof PreviewSheetVerificationLimitError) throw error; problems.push({ path, message: error.message }); };
+  const sheets = document.extensions?.[PREVIEW_SHEETS_EXTENSION]?.sheets ?? [];
+  admit(sheets.length, limits.maxSheets, "sheets");
+  for (const sheet of sheets) {
+    abort(); const path = `$.extensions.${PREVIEW_SHEETS_EXTENSION}.sheets[${sheet.id}].url`;
+    if (decoded.has(sheet.id)) { problems.push({ path, message: "duplicate sheet identity" }); continue; }
+    try { const image = decode(sheet.url, sheet); decoded.set(sheet.id, image); stats.retainedSheetBytes += image.rgba.byteLength; }
+    catch (error) { report(error, path); }
   }
+  admit((document.assets ?? []).length, limits.maxAssets, "assets");
   for (const asset of document.assets ?? []) {
+    abort();
     for (const representation of asset.representations ?? []) {
+      abort(); admit(++stats.representations, limits.maxRepresentations, "representations");
       if (representation.projection !== "cube") continue;
       const place = representation.extensions?.[PREVIEW_SHEETS_EXTENSION];
-      const sheet = place && decoded.get(place.id);
-      if (!sheet) continue;
-      const size = representation.faceSize;
+      if (!place) continue;
+      const sheet = decoded.get(place.id), size = representation.faceSize;
       const path = `$.assets[${asset.id}].representations[${representation.id}].extensions.${PREVIEW_SHEETS_EXTENSION}`;
-      if (!Number.isSafeInteger(size) || size < 1 || !Number.isSafeInteger(place.x) || place.x < 0 || !Number.isSafeInteger(place.y) || place.y < 0 || place.x + CUBE_FACE_NAMES.length * size > sheet.width || place.y + size > sheet.height) {
-        problems.push({ path, message: "the cube's six faces do not lie inside the decoded sheet" });
-        continue;
-      }
-      CUBE_FACE_NAMES.forEach((face, at) => {
-        const url = representation.faces?.[face];
-        if (typeof url !== "string") { problems.push({ path, message: `the cube has no ${face} original face file` }); return; }
-        const bytes = read(url);
-        if (!bytes) { problems.push({ path, message: `${representation.faces[face]} does not exist` }); return; }
+      if (!sheet) { problems.push({ path, message: `sheet ${place.id} is unavailable for required equivalence verification` }); continue; }
+      if (!Number.isSafeInteger(size) || size < 1 || !Number.isSafeInteger(place.x) || place.x < 0 || !Number.isSafeInteger(place.y) || place.y < 0 || place.x + CUBE_FACE_NAMES.length * size > sheet.width || place.y + size > sheet.height) { problems.push({ path, message: "the cube's six faces do not lie inside the decoded sheet" }); continue; }
+      for (const [at, face] of CUBE_FACE_NAMES.entries()) {
+        abort(); const url = representation.faces?.[face];
+        if (typeof url !== "string") { problems.push({ path, message: `the cube has no ${face} original face file` }); continue; }
         let file;
-        try { file = decodeRgb(bytes, representation.faces[face]); }
-        catch (error) { problems.push({ path, message: error.message }); return; }
-        if (file.width !== size || file.height !== size) { problems.push({ path, message: `${representation.faces[face]} is not ${size} × ${size} px` }); return; }
-        let squared = 0;
+        try { file = decode(url); } catch (error) { report(error, path); continue; }
+        if (file.width !== size || file.height !== size) { problems.push({ path, message: `${url} is not ${size} × ${size} px` }); continue; }
+        work(size * size); let squared = 0;
         for (let row = 0; row < size; row++) {
-          for (let column = 0; column < size * 3; column++) {
-            const difference = file.rgb[row * size * 3 + column] - sheet.rgb[((place.y + row) * sheet.width + place.x + at * size) * 3 + column];
-            squared += difference * difference;
+          abort();
+          for (let column = 0; column < size; column++) for (let channel = 0; channel < 3; channel++) {
+            const difference = file.rgba[(row * size + column) * 4 + channel] - sheet.rgba[((place.y + row) * sheet.width + place.x + at * size + column) * 4 + channel]; squared += difference * difference;
           }
         }
-        const mean = squared / (size * size * 3);
-        const psnr = mean > 0 ? 10 * Math.log10((255 * 255) / mean) : Number.POSITIVE_INFINITY;
+        const mean = squared / (size * size * 3), psnr = mean > 0 ? 10 * Math.log10((255 * 255) / mean) : Number.POSITIVE_INFINITY;
         lowest = Math.min(lowest, psnr);
-        if (psnr < minPsnrDb) problems.push({ path, message: `the ${face} face in sheet "${place.id}" at (${place.x + at * size}, ${place.y}) is ${psnr.toFixed(1)} dB from ${representation.faces[face]}, under ${minPsnrDb} dB: not the same picture` });
-      });
+        if (psnr < minPsnrDb) problems.push({ path, message: `the ${face} face in sheet "${place.id}" at (${place.x + at * size}, ${place.y}) is ${psnr.toFixed(1)} dB from ${url}, under ${minPsnrDb} dB: not the same picture` });
+      }
     }
   }
-  return { problems, lowestPsnrDb: lowest };
+  abort(); return { problems, lowestPsnrDb: lowest, stats };
 }
 
 /** Pure extraction of a decoded RGB sheet; no GPU upload or scene interpretation. */

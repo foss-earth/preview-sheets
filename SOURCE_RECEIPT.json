@@ -305,5 +305,81 @@
     "scope": "Portable public provenance for prior retained local qualification. Execution/source manifests remain private retained evidence identified by documentary evidence IDs and their unchanged SHA256 seals. Evidence IDs are not package-relative files or public download URLs.",
     "originalReceiptSha256": "eabadc660efa2aaeb42dc0dc2566914e615c98872dab592a4754076116f0edec",
     "currentPreparation": "Metadata-only portable publication candidate; new source/artifact/ref qualification remains pending. Existing individual check receipts and exact archive descriptors retain qualification only for their original bytes and scope."
+  },
+  "qualifiedCompositionDelivery": {
+    "schemaVersion": 1,
+    "preparedAtUtc": "2026-10-10T20:52:31.113658+00:00",
+    "baseRevision": "138939f845c5ab384740773a46eb4350bf2b4066",
+    "sourceManifest": {
+      "path": "build/repository-split/checks/2026-10-10-preview-scenes-qualified-delivery/final-source-manifest.json",
+      "sha256": "28c830eee6111ac55debb1acd16ccc4c193aa4170aba3ba3115fc1e805e0a5a4",
+      "sizeBytes": 7832,
+      "files": 46,
+      "excludes": "SOURCE_RECEIPT.json to avoid a circular seal; final receipt/archive/commit separately pinned in exact delivery"
+    },
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./core": {
+        "types": "./dist/core.d.ts",
+        "import": "./dist/core.js"
+      },
+      "./schema": {
+        "types": "./dist/schema.d.ts",
+        "import": "./dist/schema.js"
+      },
+      "./preparation": {
+        "types": "./node/preparation.d.mts",
+        "import": "./node/preparation.mjs"
+      },
+      "./browser": {
+        "types": "./dist/browser.d.ts",
+        "import": "./dist/browser.js"
+      },
+      "./schema/extension.json": "./schema/extension.json",
+      "./schema/place.json": "./schema/place.json",
+      "./scene-extension": {
+        "types": "./dist/sceneExtension.d.ts",
+        "import": "./dist/sceneExtension.js"
+      },
+      "./settings": {
+        "types": "./dist/settings.d.ts",
+        "import": "./dist/settings.js"
+      },
+      "./composition": {
+        "types": "./dist/composition.d.ts",
+        "import": "./dist/composition.js"
+      },
+      "./composition-node": {
+        "types": "./node/composition.d.mts",
+        "import": "./node/composition.mjs"
+      }
+    },
+    "qualification": "Owner checks and final new-archive strict isolated qualification are recorded externally under the named delivery evidence; local source commit and full intended-ref audit required. Remote admission and consumer application/browser adoption are pending.",
+    "sharedCi": {
+      "revision": "1db73d1ddb342e348a2c9e8387f7bbc7ebb3225e",
+      "archiveSha256": "bd884d925b8a7339b15fa61a477cf652bb73d41cc68addf50a050ab6cb151611",
+      "sizeBytes": 68164,
+      "policySha256": "cdcda3c5d2968fe115e61627fca95ec744637de533750f1ee680c2a5ede49606",
+      "callerSha256": "b9fdfbf4bd61ed727abaef4fd9990b92714a6d2c1388feec600dc16337436b2c",
+      "actualRemoteAdmissionVerified": false,
+      "docsOnlyMetadataSkipped": false
+    },
+    "compatibility": "Additive public contracts, existing defaults and original media preserved. Prior source commits and exact archives retained for rollback.",
+    "producerInputs": {
+      "path": "build/repository-split/checks/2026-10-10-preview-scenes-qualified-delivery/producer-inputs/adoption.json",
+      "sha256": "16c17f76a505869a56556b15e8e3e2f9121f7d32cced62601dee0ee666fb4917",
+      "adoptedArchives": [
+        {
+          "name": "@foss-earth/images",
+          "version": "0.1.0",
+          "archive": "/Users/felg/gh/foss-earth/images/build/repository-split/checks/2026-10-10-preview-scenes-qualified-delivery/artifacts/foss-earth-images-0.1.0.tgz",
+          "sha256": "cca1df6798d4d5eccf347ac995e00816529b84bdda7b6914268ff2998341f1f8",
+          "bytes": 158207
+        }
+      ]
+    }
   }
 }

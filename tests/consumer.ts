@@ -27,3 +27,10 @@ export function composeCubePorts<T extends WholeImageTexture>(sources: PreviewSh
 export { face };
 import { PREVIEW_SHEETS_PARAMETERS } from "@foss-earth/preview-sheets/settings";
 void PREVIEW_SHEETS_PARAMETERS;
+
+import { createPreviewSheetsCompositionOwner, type PreviewSheetsCompositionOwner } from "@foss-earth/preview-sheets/composition";
+import { createNodePreviewSheetsCompositionOwner, type NodePreviewSheetsCompositionOwner } from "@foss-earth/preview-sheets/composition-node";
+import { verifyPreviewSheets, type PreviewSheetVerificationStats } from "@foss-earth/preview-sheets/preparation";
+export const compositionOwner: PreviewSheetsCompositionOwner = createPreviewSheetsCompositionOwner({ aliases: { child: { old: "new" } } });
+export const nodeCompositionOwner: NodePreviewSheetsCompositionOwner = createNodePreviewSheetsCompositionOwner({ verificationLimits: { maxMemoryBytes: 2000000, maxDecodedPixels: 1000 } });
+export const verificationStats: PreviewSheetVerificationStats = verifyPreviewSheets(document, () => null, 28, { signal: new AbortController().signal }).stats;

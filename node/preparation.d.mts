@@ -25,5 +25,12 @@ export interface AddPreviewSheetsOptions {
 export function addPreviewSheets<T extends PreparationDocument>(document: T, options: AddPreviewSheetsOptions): { document: T; files: readonly { url: string; bytes: Uint8Array }[]; cubes: number };
 /** Legacy top-level records are read only for explicit preparation migration. */
 export function sheetsOf(document: Pick<PreparationDocument, "extensions" | "sheets">): readonly SheetRecord[];
-export function verifyPreviewSheets(document: PreparationDocument, read: AddPreviewSheetsOptions["read"], minPsnrDb?: number): { problems: readonly ImageDiagnostic[]; lowestPsnrDb: number };
+export interface PreviewSheetVerificationLimits {
+  maxAssets: number; maxSheets: number; maxRepresentations: number; maxFiles: number; maxEncodedBytes: number; maxInputBytes: number;
+  maxMemoryBytes: number; maxDecodedPixels: number; maxWorkPixels: number; maxMetadataBytes: number; maxChunks: number;
+}
+export const DEFAULT_PREVIEW_SHEET_VERIFICATION_LIMITS: Readonly<PreviewSheetVerificationLimits>;
+export class PreviewSheetVerificationLimitError extends RangeError {}
+export interface PreviewSheetVerificationStats { files: number; inputBytes: number; decodedPixels: number; workPixels: number; retainedSheetBytes: number; peakWorkingBytes: number; representations: number }
+export function verifyPreviewSheets(document: PreparationDocument, read: AddPreviewSheetsOptions["read"], minPsnrDb?: number, options?: Partial<PreviewSheetVerificationLimits> & { signal?: AbortSignal }): { problems: readonly ImageDiagnostic[]; lowestPsnrDb: number; stats: PreviewSheetVerificationStats };
 export function extractSheetFaces(image: RgbImage, place: Pick<SheetPlaceRecord, "x" | "y">, faceSize: number): Readonly<Record<CubeFaceName, RgbImage>>;

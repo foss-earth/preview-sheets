@@ -36,6 +36,14 @@
     "./settings": {
       "types": "./dist/settings.d.ts",
       "import": "./dist/settings.js"
+    },
+    "./composition": {
+      "types": "./dist/composition.d.ts",
+      "import": "./dist/composition.js"
+    },
+    "./composition-node": {
+      "types": "./node/composition.d.mts",
+      "import": "./node/composition.mjs"
     }
   },
   "files": [

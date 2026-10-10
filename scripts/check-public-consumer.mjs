@@ -5,6 +5,8 @@ const core = await import("@foss-earth/preview-sheets");
 const browser = await import("@foss-earth/preview-sheets/browser");
 const preparation = await import("@foss-earth/preview-sheets/preparation");
 const extension = await import("@foss-earth/preview-sheets/scene-extension");
+const composition = await import("@foss-earth/preview-sheets/composition");
+const nodeComposition = await import("@foss-earth/preview-sheets/composition-node");
 const settings = await import("@foss-earth/preview-sheets/settings");
 for (const name of ["document", "window", "ImageBitmap", "createImageBitmap", "fetch"]) delete globalThis[name];
 assert.equal(core.PREVIEW_SHEETS_EXTENSION, "foss-earth.preview-sheets");
@@ -15,12 +17,13 @@ assert.equal(settings.PREVIEW_SHEETS_PARAMETERS[0].id, "scene.panorama.previewSh
 assert.deepEqual(settings.PREVIEW_SHEETS_PARAMETERS[0].home, { tab: "scenes", section: "loading", level: "main" });
 assert.deepEqual(core.sheetFaceRectangles({ x: 0, y: 8 }, 8).map(rect => rect.face), ["px", "nx", "py", "ny", "pz", "nz"]);
 assert.equal(JSON.parse(readFileSync(new URL(import.meta.resolve("@foss-earth/preview-sheets/schema/place.json")), "utf8")).additionalProperties, false);
-for (const name of ["index", "core", "schema", "browser", "sceneExtension", "settings"]) {
+for (const name of ["index", "core", "schema", "browser", "sceneExtension", "settings", "composition"]) {
   assert.ok(readFileSync(new URL(`../dist/${name}.d.ts`, import.meta.url), "utf8").length);
   const code = readFileSync(new URL(`../dist/${name}.js`, import.meta.url), "utf8");
   assert.doesNotMatch(code, /from ["']\.[^"']+(?<!\.js)["']/);
 }
 assert.ok(readFileSync(new URL("../node/preparation.d.mts", import.meta.url), "utf8").length);
+assert.ok(readFileSync(new URL("../node/composition.d.mts", import.meta.url), "utf8").length);
 process.stdout.write("Public core/schema/browser/preparation imported without browser globals; declarations, source face order and JSON schema present.\n");
 
 // Public-only composition with actual installed common input accounting.
@@ -29,6 +32,19 @@ const { createImageFileService } = await import("@foss-earth/images/browser");
 const { encodePng } = await import("@foss-earth/images/node");
 const { uploadCubeSource } = await import("@foss-earth/cubemap/browser");
 const nativeBytes = encodePng({ width: 48, height: 8, rgb: new Uint8Array(48 * 8 * 3).fill(80) });
+const sheetRecord = { id: "shared", revision: "immutable-r1", mimeType: "image/png", width: 48, height: 8, encodedBytes: nativeBytes.length, url: "https://example.invalid/shared.png" };
+const entries = ["west", "east"].map(key => ({ value: { sheets: [sheetRecord] }, path: `$.${key}`, child: { key, baseUrl: "https://example.invalid/final/" } }));
+const owner = composition.createPreviewSheetsCompositionOwner(), merged = owner.composeDocument(entries, { limits: { assets: 2 } });
+assert.equal(merged.document.sheets.length, 1);
+assert.throws(() => owner.composeDocument([entries[0], { ...entries[1], value: { sheets: [{ ...sheetRecord, revision: "drift" }] } }], { limits: { assets: 2 } }), /collision/);
+const authoredFaces = Object.fromEntries(["px", "nx", "py", "ny", "pz", "nz"].map(face => [face, `https://example.invalid/${face}.png`]));
+const verificationAsset = { id: "a", type: "panorama-image", representations: [{ id: "preview", role: "preview", projection: "cube", faceSize: 8, faces: authoredFaces, extensions: { [core.PREVIEW_SHEETS_EXTENSION]: { id: "shared", x: 0, y: 0 } } }] };
+const faceBytes = encodePng({ width: 8, height: 8, rgb: new Uint8Array(8 * 8 * 3).fill(80) });
+const verificationScene = { assets: new Map([["a", verificationAsset]]), extensionData: new Map([[core.PREVIEW_SHEETS_EXTENSION, new Map([["shared", sheetRecord]])]]) };
+const nodeOwner = nodeComposition.createNodePreviewSheetsCompositionOwner();
+assert.deepEqual([...nodeOwner.verifyFiles(verificationScene, url => url === sheetRecord.url ? nativeBytes : faceBytes, {})], []);
+assert.throws(() => nodeComposition.createNodePreviewSheetsCompositionOwner({ verificationLimits: { maxMemoryBytes: 1 } }).verifyFiles(verificationScene, () => nativeBytes, {}), /budget/);
+assert.throws(() => nodeComposition.createNodePreviewSheetsCompositionOwner({ verificationLimits: { maxDecodedPixels: 1 } }).verifyFiles(verificationScene, () => nativeBytes, {}), /budget/);
 const nativeBroker = createImageSessionBroker({ pools: { encoded: 100000, decoded: 100000, sourceGpu: 100000, uploadOutstanding: 100000, overlap: 100000 }, requests: 1, decodes: 1 });
 const nativeScope = nativeBroker.scope();
 let nativeSheetClosed = 0, nativeFacesClosed = 0, nativeDisposed = 0, nativeReady = 0;
