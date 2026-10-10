@@ -308,7 +308,7 @@
   },
   "qualifiedCompositionDelivery": {
     "schemaVersion": 1,
-    "preparedAtUtc": "2026-10-10T20:52:31.113658+00:00",
+    "preparedAtUtc": "2026-10-10T20:57:48.582046+00:00",
     "baseRevision": "138939f845c5ab384740773a46eb4350bf2b4066",
     "sourceManifest": {
       "path": "build/repository-split/checks/2026-10-10-preview-scenes-qualified-delivery/final-source-manifest.json",
@@ -375,9 +375,9 @@
         {
           "name": "@foss-earth/images",
           "version": "0.1.0",
-          "archive": "/Users/felg/gh/foss-earth/images/build/repository-split/checks/2026-10-10-preview-scenes-qualified-delivery/artifacts/foss-earth-images-0.1.0.tgz",
           "sha256": "cca1df6798d4d5eccf347ac995e00816529b84bdda7b6914268ff2998341f1f8",
-          "bytes": 158207
+          "bytes": 158207,
+          "archiveFilename": "foss-earth-images-0.1.0.tgz"
         }
       ]
     }
