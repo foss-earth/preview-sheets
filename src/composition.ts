@@ -20,7 +20,8 @@ export interface PreviewSheetsCompositionOwner {
   files(scene: PreviewCompositionScene): Iterable<{ path: string; file: SheetRecord; encodedBytes: number }>;
 }
 export class PreviewSheetsCompositionError extends Error {
-  constructor(readonly path: string, message: string) { super(`${path}: ${message}`); this.name = "PreviewSheetsCompositionError"; }
+  readonly path: string;
+  constructor(path: string, message: string) { super(`${path}: ${message}`); this.path = path; this.name = "PreviewSheetsCompositionError"; }
 }
 interface CompositionState { sheets: Map<string, SheetRecord>; mappings: Map<string, Map<string, string>> }
 const abort = (signal?: AbortSignal): void => { if (signal?.aborted) throw signal.reason ?? new DOMException("Preview composition cancelled", "AbortError"); };
