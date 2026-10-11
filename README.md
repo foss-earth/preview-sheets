@@ -1,53 +1,45 @@
 # Preview sheets
 
-`@foss-earth/preview-sheets` 0.1.0 is a private staging extraction from Earth
-commit `90e23b3ee96f53ec5900afc5991a21fffa58649d`. It owns the optional
-`foss-earth.preview-sheets` extension, packing and verification, and shared
-sheet acquisition. Source lineage and remote admission remain pending.
+`@foss-earth/preview-sheets` 0.1.0 provides the optional `foss-earth.preview-sheets` extension for FOSS Earth cube images: its schema and validators, a packing and verification tool, and shared acquisition of the sheet images. A preview sheet is one small JPEG that holds all six faces of a cube, so a viewer can show a low-resolution preview from a single download before the full faces load.
 
+## Exports
 
-The pure root, `/core` and `/schema` entries expose sheet/place records,
-`sheetFaceRectangles`, `sheetSourceKey`, `sheetMediaGroup`, `validateSheetRecord`,
-`validatePreviewSheets` and `validateSheetPlace`. Optional invalid data produces
-warnings and no resolved place. The caller still requires the cube's six face
-files. Relative URLs resolve against the caller's manifest URL; HTTP(S) source
-URLs cannot carry credentials. JSON schemas are exported at
-`/schema/extension.json` and `/schema/place.json`. The scene envelope, asset
-references, navigation and scene-writing CLI belong to their respective owners.
+| Export | Contents |
+| --- | --- |
+| `.`, `/core`, `/schema` | Pure sheet and place records and validators. |
+| `/preparation` | Node-only packing and verification tools. |
+| `/scene-extension` | `createPreviewSheetsExtensionHook`. |
+| `/browser` | `createPreviewSheetSources`. |
+| `/settings` | `PREVIEW_SHEETS_PARAMETERS`. |
+| `/composition`, `/composition-node` | Merging sheets from several child scenes. |
+| `/schema/extension.json`, `/schema/place.json` | JSON schemas. |
 
-`/preparation` is the optional Node entry. `composeSheet`, `sheetColumns`,
-`addPreviewSheets`, `sheetsOf`, `extractSheetFaces` and `verifyPreviewSheets`
-preserve the original packing/extension tools. A cube is one horizontal strip
-in source order `px nx py ny pz nz`; no face is rotated. Packing consumes already
-prepared opaque sRGB JPEG/PNG face files, keeps the originals, and produces JPEG
-with face sizes divisible by eight pixels. The default 4,000,000-pixel limit is
-exported as `SHEET_PIXELS` and can be overridden explicitly. Padding cells count
-toward that limit. Verification compares every sheet face against its original
-using the caller's PSNR threshold (28 dB by default), and reports missing files,
-bad decodes, wrong dimensions, out-of-bounds places and mismatched pictures.
-`sheetsOf` and `addPreviewSheets` read/migrate legacy preparation records; the
-runtime validator accepts only the namespaced extension.
+### Records and validation
 
-`/scene-extension` exports `createPreviewSheetsExtensionHook`, a structural
-optional owner hook with `name`, `validateDocument` and `resolveRepresentation`.
-Pass it explicitly to the scene envelope's extension registration. It validates
-the document's sheet list and augments a validated cube with its resolved
-`sheet` place; a bad optional place warns and retains the original faces.
-It imports no scene implementation or scene types.
+The pure entries export the sheet and place records, `sheetFaceRectangles`, `sheetSourceKey`, `sheetMediaGroup`, `validateSheetRecord`, `validatePreviewSheets` and `validateSheetPlace`.
 
-The optional `/browser` entry exposes `createPreviewSheetSources`. Create one
-instance with the host's existing `ImageSessionBroker`, common cached `obtain`
-and common header-checked `decode` ports. Cropping is injected. For each cube,
-pass its dedicated scope, enabled setting, resolved place, face size, label and
-six-original-file `fallback` callback to `acquireCubeFaces`. A returned source
-contains six `ImageBitmap` faces and an idempotent `close`; pass those faces to
-cubemap's `uploadCubeSource`, or inject acquisition into its `loadCube`; the
-uploader closes the source after upload/readiness. The adapter
-allocates no texture, creates no renderer or scheduler, and requests no frames.
-The `obtain` file includes explicit sheet id/revision and the original common
-media-store group (`sheet <id>@<revision>`), so the caller's existing cache can
-keep a changed revision at the same URL separately. No persistent cache is
-created by this adapter.
+- Invalid optional data produces warnings and no resolved place.
+- The caller still needs the cube's six original face files.
+- Relative URLs resolve against the caller's manifest URL. HTTP(S) source URLs cannot carry credentials.
+- The scene envelope, asset references, navigation and the scene-writing CLI belong to other repositories.
+
+### Packing and verification (`/preparation`)
+
+`composeSheet`, `sheetColumns`, `addPreviewSheets`, `sheetsOf`, `extractSheetFaces` and `verifyPreviewSheets`.
+
+- A cube is one horizontal strip in the order `px nx py ny pz nz`. No face is rotated.
+- Packing takes already prepared opaque sRGB JPEG or PNG face files, keeps the originals, and writes a JPEG whose face sizes are divisible by eight pixels.
+- The default limit is 4,000,000 pixels, exported as `SHEET_PIXELS` and overridable. Padding cells count toward it.
+- Verification compares every sheet face with its original using a PSNR threshold (28 dB by default). It reports missing files, bad decodes, wrong dimensions, out-of-bounds places and mismatched pictures.
+- `sheetsOf` and `addPreviewSheets` also read and migrate legacy preparation records. The runtime validator accepts only the namespaced extension.
+
+### Scene extension hook
+
+`createPreviewSheetsExtensionHook` returns a structural hook with `name`, `validateDocument` and `resolveRepresentation`. Pass it to the scene envelope's extension registration. It validates the document's sheet list and adds the resolved `sheet` place to a validated cube. A bad optional place produces a warning and keeps the original faces. It imports no scene code or types.
+
+### Browser acquisition
+
+`createPreviewSheetSources` takes the host's `ImageSessionBroker`, the common cached `obtain` port and the common header-checked `decode` port. Cropping is injected. For each cube, call `acquireCubeFaces` with its scope, the enabled setting, the resolved place, the face size, a label, and a `fallback` callback that loads the six original files. The returned source holds six `ImageBitmap` faces and an idempotent `close`. Pass the faces to cubemap's `uploadCubeSource`, or inject the acquisition into its `loadCube`.
 
 ```ts
 import { acquireCubeFaces, loadCube } from "@foss-earth/cubemap/browser";
@@ -72,87 +64,38 @@ image.settleReplacement();
 image.dispose();
 ```
 
-Concurrent cubes share one download/decode keyed by sheet id, revision and URL.
-The last crop user releases the decoded sheet. Nonabortable crop work keeps its
-direct decoded-pool grants and an explicit common `HeldDecodedImage.retain()`
-input hold until the native call settles, even after cube/registry cancellation
-or whole-broker invalidation/disposal. Late output closes before output charges
-free, then the last native input hold closes the sheet and releases its existing
-decoded charge. Throwing bitmap cleanup still releases every reservation. If
-input cleanup fails after all six crops succeed, the unpublished faces also
-close and free their charges before acquisition rejects.
-A cancelled consumer lets other
-consumers finish; late decode/crop completions are closed. Damaged sheets use
-the original files for the remainder of the current broker generation. Broker
-invalidation permits a fresh attempt at the same revision. A still-running old
-crop retains its old input; a new generation never shares that closing input or
-inherits its cancellation as a content failure. Input closure and reservation
-release happen before face ownership transfers, followed by a current-operation
-check, so a cleanup observer ending the scope cannot publish closed faces.
-Temporary common capacity refusal falls back without marking an intact sheet
-failed for the visit. Wrong crop dimensions close partial output and fall back.
-Turning sheets off or omitting cropping uses the original files immediately.
-The common decoder implements the optional retain port; a supplied legacy
-decoder without it takes original-face fallback and is not marked damaged.
-This is an explicit compatibility change: old custom decoders must implement
-the reliable hold to use sheets. The adapter never assumes that a started crop
-has already captured input pixels, and it creates no second broker or cache.
-Call `dispose` when ending the host session/scene, and dispose cube operation
-scopes through the same broker. Cache policy, request/decode limits, encoded and
-decoded budgets come from the host's common image services.
+The adapter allocates no texture, creates no renderer or scheduler, requests no frames and creates no persistent cache. Cache policy, request and decode limits, and the encoded and decoded budgets come from the host's image services.
 
-This package adds no image formats beyond the extracted opaque sRGB JPEG/PNG
-path. It provides no progressive JPEG, HDR, video, stereo, GPU validation or
-scene-document orchestration. Public source contracts are ready; package checks,
-installed artifact pins and consumer adoption are pending their reserved turn.
+Behavior:
 
-`npm run ci` runs cached lint, incremental types/build, retained original packing
-tests, optional-validation/lifecycle tests, and a public consumer. Each run's
-logs belong under this owner's `build/checks/`. No server or GPU check starts.
-The package carries the original AGPL license and immutable source mappings in
-`SOURCE_PROVENANCE.json`; the shared CI caller and shared conformance fixtures
-are preserved from the reviewed local CI9e046dd scaffold. Actual installed
-shared conformance, full-ref audit, public caller availability and remote admission
-remain pending. Metadata checks cannot skip documentation/schema/assets changes.
+- The `obtain` request includes the sheet id, revision and the media-store group `sheet <id>@<revision>`, so a changed revision at the same URL is cached separately.
+- Concurrent cubes share one download and decode, keyed by sheet id, revision and URL. The last crop user releases the decoded sheet.
+- A cancelled consumer does not stop the others. Late decode or crop results are closed.
+- Crop work that cannot be aborted keeps its decoded-pool grants and a `HeldDecodedImage.retain()` hold on its input until the native call settles, even after cancellation or broker invalidation or disposal. The last hold closes the sheet and frees its decoded charge. If input cleanup fails after all six crops succeed, the unpublished faces are closed before acquisition rejects.
+- A damaged sheet falls back to the original files for the rest of the current broker generation. Invalidating the broker allows a fresh attempt at the same revision.
+- A temporary capacity refusal from the common services falls back without marking an intact sheet as failed. Wrong crop dimensions close the partial output and fall back.
+- Turning sheets off, or omitting cropping, uses the original files immediately.
+- The common decoder implements the optional retain port. A custom decoder without it takes the original-face fallback and is not marked damaged, so older custom decoders must implement the hold to use sheets.
 
-`scripts/check-isolated-archive.mjs` creates a fresh owner-local offline consumer
-from mandatory exact archive/digest pairs for preview-sheets, images, cubemap,
-UI, jpeg-js and TypeScript. It runs the installed public fixture with realpath
-guards and an outside negative control, then pure/browser declaration
-checks. The fixture preserves one shared download/decode, native input retention
-through broker invalidation/disposal and crop resolve/reject, six-original fallback,
-cubemap upload/readiness authority and host overlap settlement. The retained
-public face-handoff body also runs through this installed/archive route: it
-asserts six cropped inputs and their decoded grants survive synchronous scope
-cancellation inside upload and throwing late texture disposal, followed by
-ordered primary/output/face errors and eventual complete cleanup. All imports
-for that body use the same guarded isolated public packages. It has not run;
-no runtime range, hardware qualification or accepted artifact is inferred.
-The outer archive harness also verifies every installed physical package name,
-exact version and confined package/manifest realpath before imports. Both pure
-and public declaration passes require `skipLibCheck: false`; the existing DOM
-and DOM.Iterable type-library distinction and empty ambient `types` remain.
-Declaration resolution traces are checked with physical realpaths. The retained
-runtime bodies, face-handoff assertions and exact archive dependency set are
-unchanged; this stricter qualification remains source-only and unrun.
-Six additional generation/publication regression cases use the actual common
-file service and broker, including an old crop still pending while a new sheet
-loads, generation-local failures, reentrant input cleanup and synchronous obtain
-callbacks starting another acquisition. Independent cleanup attempts preserve
-input and output errors together. These cases are prepared
-source only and have not run.
-Declaration fixtures include DOM typings for the common standard `AbortSignal`
-contract; the runtime guard still forbids browser initialization.
+Call `dispose` when the host session or scene ends, and dispose cube operation scopes through the same broker. For how sources keep native input alive across host uploads, see [native input lifetime](docs/native-input-lifetime.md).
 
-Optional `./settings` exports `PREVIEW_SHEETS_PARAMETERS` with the unchanged `scene.panorama.previewSheets` boolean record at Scenes → Loading and memory. It uses a type-only `@foss-earth/ui/settings` contract, registers nothing and preserves the source description, true default, reason and provenance. The host supplies the exact UI artifact when consuming these declarations.
+### Settings
 
-## Native input lifetime source increment
+`PREVIEW_SHEETS_PARAMETERS` is the `scene.panorama.previewSheets` boolean (default true) under Scenes, Loading and memory. It registers nothing itself; the host registers it. It uses the type-only `@foss-earth/ui/settings` contract, so the host supplies `@foss-earth/ui` when consuming these declarations.
 
-The actual common decoded inputs and sheet-crop face sources now provide retained
-pixel ownership across awaited host uploads and stale texture cleanup. See
-[the exact lifetime and legacy compatibility contract](docs/native-input-lifetime.md).
-All new source fixtures and installed-consumer changes remain unrun; no current
-app adoption or backend qualification is claimed.
+### Composition
+
+`createPreviewSheetsCompositionOwner` (also exported from the root) and the Node variant `createNodePreviewSheetsCompositionOwner` from `/composition-node` merge the sheets of child scenes through injected scene composition ports. The Node variant adds required face and cell equivalence verification. See [scene composition](docs/scene-composition.md).
+
+## Limits
+
+Only the opaque sRGB JPEG and PNG path is supported. There is no progressive JPEG, HDR, video or stereo support, and no scene-document orchestration.
+
+## Development
+
+This package depends on `@foss-earth/cubemap` and `@foss-earth/images`, and has `@foss-earth/ui` as an optional peer, all at versions that are not published yet. Its own `npm install`, tests and build therefore do not work on their own. Develop it through the app, which uses libraries straight from their checkouts: see [Local source](https://github.com/foss-earth/app#local-source).
+
+Scripts in `package.json`: `build`, `typecheck`, `lint`, `test`, `typecheck:consumer`, `check:implementation` and `ci`.
 
 ## Project policies
 
@@ -160,10 +103,3 @@ app adoption or backend qualification is claimed.
 - [Contributing](https://github.com/foss-earth/.github/blob/main/CONTRIBUTING.md)
 - [AGPL-3.0 license](LICENSE)
 - [Security](https://github.com/foss-earth/.github/blob/main/SECURITY.md)
-
-The current contribution rule uses sentence case and lives in CONTRIBUTING's
-later Commit attribution section. The retained shared CI9e046dd descriptor still
-pins the earlier uppercase policy. Its actual prior19-case conformance pass is
-retained with that scope; Platform's next checked sentence-case shared pin and
-new owner conformance are required before final acceptance. No policy checker
-or digest is bypassed.
