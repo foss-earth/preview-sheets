@@ -6,7 +6,7 @@
  * read sheets and for when a sheet fails.
  */
 import { createHash } from "node:crypto";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
 import { decodeJpeg, decodePng, encodeJpeg, sniffImage, cropImage, inspectImageDecode, ImageDecodeLimitError } from "@foss-earth/images/node";
 import { PREVIEW_SHEETS_EXTENSION } from "../dist/core.js";
 export { PREVIEW_SHEETS_EXTENSION };

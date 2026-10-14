@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
 import { PREVIEW_SHEETS_EXTENSION, sheetFaceRectangles, validatePreviewSheets, validateSheetPlace, validateSheetRecord } from "../src/index.js";
 
 const sheet = { id: "sheet", revision: "r1", mimeType: "image/jpeg", width: 96, height: 32, encodedBytes: 100, url: "media/sheet.jpg" };

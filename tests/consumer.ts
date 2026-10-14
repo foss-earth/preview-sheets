@@ -2,8 +2,8 @@ import { PREVIEW_SHEETS_EXTENSION, validatePreviewSheets, validateSheetPlace } f
 import { createPreviewSheetSources, type PreviewSheetPorts, type PreviewSheetSources, type CubeFaceSource as PreviewCubeFaceSource } from "@foss-earth/preview-sheets/browser";
 import type { ResolvedSheetPlace } from "@foss-earth/preview-sheets/core";
 import { addPreviewSheets, composeSheet, extractSheetFaces, type PreparationDocument } from "@foss-earth/preview-sheets/preparation";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
-import { acquireCubeFaces, type CubeFaceSource, type CubeLoadPorts, type CubeUploadPorts } from "@foss-earth/cubemap/browser";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
+import { acquireCubeFaces, type CubeFaceSource, type CubeLoadPorts, type CubeUploadPorts } from "@foss-earth/sphere-cubemap/browser";
 import type { WholeImageTexture } from "@foss-earth/images/browser";
 
 const document: PreparationDocument = { assets: [] };

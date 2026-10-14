@@ -1,4 +1,4 @@
-import { CUBE_FACE_NAMES, type CubeFaceName } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES, type CubeFaceName } from "@foss-earth/sphere-cubemap/core";
 import type { MediaGroup } from "@foss-earth/images";
 
 /** Optional extension: original six face files remain required and usable. */

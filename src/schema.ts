@@ -1,5 +1,5 @@
 import { ImageRecordChecker, resolveImageUrl, type ImageDiagnostic } from "@foss-earth/images";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
 import { PREVIEW_SHEETS_EXTENSION, type ResolvedSheetPlace, type SheetRecord } from "./core.js";
 
 export interface OptionalSheetValidation<T> { value: T | null; warnings: readonly ImageDiagnostic[] }

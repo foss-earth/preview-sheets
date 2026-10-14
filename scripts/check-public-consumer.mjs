@@ -30,7 +30,7 @@ process.stdout.write("Public core/schema/browser/preparation imported without br
 const { createImageSessionBroker } = await import("@foss-earth/images");
 const { createImageFileService } = await import("@foss-earth/images/browser");
 const { encodePng } = await import("@foss-earth/images/node");
-const { uploadCubeSource } = await import("@foss-earth/cubemap/browser");
+const { uploadCubeSource } = await import("@foss-earth/sphere-cubemap/browser");
 const nativeBytes = encodePng({ width: 48, height: 8, rgb: new Uint8Array(48 * 8 * 3).fill(80) });
 const sheetRecord = { id: "shared", revision: "immutable-r1", mimeType: "image/png", width: 48, height: 8, encodedBytes: nativeBytes.length, url: "https://example.invalid/shared.png" };
 const entries = ["west", "east"].map(key => ({ value: { sheets: [sheetRecord] }, path: `$.${key}`, child: { key, baseUrl: "https://example.invalid/final/" } }));

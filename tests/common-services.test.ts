@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createImageSessionBroker, createMediaStore, type MediaGroupRecord, type MediaStoreBackend, type SavedFile } from "@foss-earth/images";
 import { createImageFileService } from "@foss-earth/images/browser";
 import { encodePng } from "@foss-earth/images/node";
-import { uploadCubeSource } from "@foss-earth/cubemap/browser";
+import { uploadCubeSource } from "@foss-earth/sphere-cubemap/browser";
 import type { WholeImageTexture } from "@foss-earth/images/browser";
 import { createPreviewSheetSources, type PreviewSheetFile, type CubeFaceSource } from "../src/browser.js";
 

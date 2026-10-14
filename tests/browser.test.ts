@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createImageSessionBroker, ResourceCapacityError, type ImageFile, type ImageOperationScope } from "@foss-earth/images";
 import type { EncodedImageFile, HeldDecodedImage } from "@foss-earth/images/browser";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
 import { createPreviewSheetSources, type CubeFaceSource, type PreviewSheetPorts } from "../src/browser.js";
 
 const sheet = { id: "s", revision: "1", url: "https://example.invalid/s.jpg", mimeType: "image/jpeg" as const, width: 48, height: 16, encodedBytes: 10, x: 0, y: 0 };

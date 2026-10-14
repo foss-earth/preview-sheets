@@ -83,7 +83,7 @@
     "globals": "17.6.0"
   },
   "dependencies": {
-    "@foss-earth/cubemap": "0.1.0",
+    "@foss-earth/sphere-cubemap": "0.1.0",
     "@foss-earth/images": "0.1.0"
   },
   "peerDependencies": {

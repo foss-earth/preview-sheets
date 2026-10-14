@@ -1,4 +1,4 @@
-import type { CubeFaceName } from "@foss-earth/cubemap/core";
+import type { CubeFaceName } from "@foss-earth/sphere-cubemap/core";
 import type { RgbImage, ImageDiagnostic } from "@foss-earth/images";
 import type { SheetPlaceRecord, SheetRecord } from "../dist/core.js";
 export { PREVIEW_SHEETS_EXTENSION } from "../dist/core.js";

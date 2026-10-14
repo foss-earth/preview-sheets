@@ -42,7 +42,7 @@ The pure entries export the sheet and place records, `sheetFaceRectangles`, `she
 `createPreviewSheetSources` takes the host's `ImageSessionBroker`, the common cached `obtain` port and the common header-checked `decode` port. Cropping is injected. For each cube, call `acquireCubeFaces` with its scope, the enabled setting, the resolved place, the face size, a label, and a `fallback` callback that loads the six original files. The returned source holds six `ImageBitmap` faces and an idempotent `close`. Pass the faces to cubemap's `uploadCubeSource`, or inject the acquisition into its `loadCube`.
 
 ```ts
-import { acquireCubeFaces, loadCube } from "@foss-earth/cubemap/browser";
+import { acquireCubeFaces, loadCube } from "@foss-earth/sphere-cubemap/browser";
 
 const image = await loadCube(record, {
   ...cubePorts,
@@ -93,7 +93,7 @@ Only the opaque sRGB JPEG and PNG path is supported. There is no progressive JPE
 
 ## Development
 
-This package depends on `@foss-earth/cubemap` and `@foss-earth/images`, and has `@foss-earth/ui` as an optional peer, all at versions that are not published yet. Its own `npm install`, tests and build therefore do not work on their own. Develop it through the app, which uses libraries straight from their checkouts: see [Local source](https://github.com/foss-earth/app#local-source).
+This package depends on `@foss-earth/sphere-cubemap` and `@foss-earth/images`, and has `@foss-earth/ui` as an optional peer, all at versions that are not published yet. Its own `npm install`, tests and build therefore do not work on their own. Develop it through the app, which uses libraries straight from their checkouts: see [Local source](https://github.com/foss-earth/app#local-source).
 
 Scripts in `package.json`: `build`, `typecheck`, `lint`, `test`, `typecheck:consumer`, `check:implementation` and `ci`.
 

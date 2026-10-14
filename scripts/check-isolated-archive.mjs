@@ -13,7 +13,7 @@ assert.ok(output.startsWith(path.join(owner, "build") + path.sep), "Evidence mus
 const workspace = path.join(output, "workspace");
 mkdirSync(output, { recursive: true }); mkdirSync(workspace); // fail rather than overwrite prior evidence
 const dependencies = {}, pins = {};
-for (const [key, name, version] of [["preview", "@foss-earth/preview-sheets", "0.1.0"], ["images", "@foss-earth/images", "0.1.0"], ["cubemap", "@foss-earth/cubemap", "0.1.0"], ["ui", "@foss-earth/ui", "0.1.0"], ["jpeg", "jpeg-js", "0.4.4"], ["typescript", "typescript", "5.9.3"]]) {
+for (const [key, name, version] of [["preview", "@foss-earth/preview-sheets", "0.1.0"], ["images", "@foss-earth/images", "0.1.0"], ["cubemap", "@foss-earth/sphere-cubemap", "0.1.0"], ["ui", "@foss-earth/ui", "0.1.0"], ["jpeg", "jpeg-js", "0.4.4"], ["typescript", "typescript", "5.9.3"]]) {
   assert.ok(args[key] && /^[a-f0-9]{64}$/.test(args[`${key}-sha256`] ?? ""), `Supply exact --${key} archive and --${key}-sha256`);
   const artifact = path.resolve(args[key]), bytes = readFileSync(artifact);
   const sha256 = createHash("sha256").update(bytes).digest("hex"); assert.equal(sha256, args[`${key}-sha256`]);

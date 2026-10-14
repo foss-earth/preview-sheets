@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
 import { decodeJpeg, encodeJpeg } from "@foss-earth/images/node";
 import { addPreviewSheets, composeSheet, extractSheetFaces, PREVIEW_SHEETS_EXTENSION, sheetColumns, sheetsOf, verifyPreviewSheets } from "../node/preparation.mjs";
 

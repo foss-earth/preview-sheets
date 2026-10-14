@@ -39,8 +39,8 @@ assert.deepEqual(settings.PREVIEW_SHEETS_PARAMETERS[0].home, { tab: "scenes", se
 const images = await import(resolvePublic("@foss-earth/images"));
 const transport = await import(resolvePublic("@foss-earth/images/browser"));
 const codecs = await import(resolvePublic("@foss-earth/images/node"));
-const cubemap = await import(resolvePublic("@foss-earth/cubemap/core"));
-const cubeBrowser = await import(resolvePublic("@foss-earth/cubemap/browser"));
+const cubemap = await import(resolvePublic("@foss-earth/sphere-cubemap/core"));
+const cubeBrowser = await import(resolvePublic("@foss-earth/sphere-cubemap/browser"));
 for (const name of ["window", "document", "ImageBitmap", "createImageBitmap", "fetch"]) delete globalThis[name];
 const faces = Object.fromEntries(cubemap.CUBE_FACE_NAMES.map((face, index) => [face, codecs.encodePng({ width: 8, height: 8, rgb: new Uint8Array(8 * 8 * 3).fill(20 + index * 30) })]));
 const packed = preparation.composeSheet([{ key: "a", faces }, { key: "b", faces }], 8, 95);

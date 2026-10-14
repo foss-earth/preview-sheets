@@ -1,7 +1,7 @@
 import type { ImageFile, ImageOperationScope, ImageSessionBroker, MediaGroup } from "@foss-earth/images";
 import { ResourceCapacityError } from "@foss-earth/images";
 import type { EncodedImageFile, HeldDecodedImage } from "@foss-earth/images/browser";
-import { type CubeFaceName } from "@foss-earth/cubemap/core";
+import { type CubeFaceName } from "@foss-earth/sphere-cubemap/core";
 import { sheetFaceRectangles, sheetMediaGroup, sheetSourceKey, type ResolvedSheetPlace, type SheetRecord } from "./core.js";
 
 /** Sources only. Cubemap's uploader owns textures; the host owns rendering. */

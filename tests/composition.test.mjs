@@ -3,7 +3,7 @@ import { createPreviewSheetsCompositionOwner } from "../src/composition.ts";
 import { createNodePreviewSheetsCompositionOwner } from "../node/composition.mjs";
 import { verifyPreviewSheets, PreviewSheetVerificationLimitError } from "../node/preparation.mjs";
 import { encodePng } from "@foss-earth/images/node";
-import { CUBE_FACE_NAMES } from "@foss-earth/cubemap/core";
+import { CUBE_FACE_NAMES } from "@foss-earth/sphere-cubemap/core";
 import { PREVIEW_SHEETS_EXTENSION } from "../src/core.ts";
 const base = "https://fixture.invalid/final/media-r1/";
 const sheetBytes = encodePng({ width: 12, height: 2, rgb: new Uint8Array(12 * 2 * 3).fill(80) });
